@@ -56,6 +56,7 @@ import {
   isFederatedRuleGroup,
   isGrafanaRuleIdentifier,
   isPausedRule,
+  isUngroupedRuleGroup,
   prometheusRuleType,
   rulerRuleType,
 } from '../../utils/rules';
@@ -461,6 +462,9 @@ function usePageNav(rule: CombinedRule) {
 
   const namespaceName = decodeGrafanaNamespace(rule.namespace).name;
   const groupName = rule.group.name;
+  const groupDisplayName = isUngroupedRuleGroup(groupName)
+    ? t('alerting.rules-group.ungrouped-suffix', '{{ruleName}} (Ungrouped)', { ruleName: rule.name })
+    : groupName;
 
   const isGrafanaAlertRule = rulerRuleType.grafana.alertingRule(rulerRule);
   const isGrafanaRecordingRule = rulerRuleType.grafana.recordingRule(rulerRule);
@@ -528,7 +532,7 @@ function usePageNav(rule: CombinedRule) {
       },
     ],
     parentItem: {
-      text: groupName,
+      text: groupDisplayName,
       url: groupDetailsUrl,
       // @TODO support nested folders here
       parentItem: {
