@@ -40,6 +40,51 @@ func TestBadgerKVStorageBackend(t *testing.T) {
 	})
 }
 
+func TestSegmentDataStoreStorageBackend(t *testing.T) {
+	t.Skip("segment datastore methods not yet implemented")
+
+	RunStorageBackendTest(t, func(ctx context.Context) resource.StorageBackend {
+		opts := badger.DefaultOptions("").WithInMemory(true).WithLogger(nil)
+		db, err := badger.Open(opts)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+		kvOpts := resource.KVBackendOptions{
+			KvStore:             resource.NewBadgerKV(db),
+			UseSegmentDataStore: true,
+			WatchOptions:        resource.WatchOptions{SettleDelay: time.Millisecond},
+		}
+		backend, err := resource.NewKVStorageBackend(kvOpts)
+		require.NoError(t, err)
+		return backend
+	}, &TestOptions{
+		NSPrefix: "segment-datastore-test",
+		SkipTests: map[string]bool{
+			TestBlobSupport: true,
+		},
+	})
+}
+
+func TestIntegrationBenchmarkSegmentDataStoreStorageBackend(t *testing.T) {
+	t.Skip("segment datastore methods not yet implemented")
+	testutil.SkipIntegrationTestInShortMode(t)
+
+	opts := DefaultBenchmarkOptions(t)
+	bdb, err := badger.Open(badger.DefaultOptions("").WithInMemory(true).WithLogger(nil))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = bdb.Close()
+	})
+	backend, err := resource.NewKVStorageBackend(resource.KVBackendOptions{
+		KvStore:             resource.NewBadgerKV(bdb),
+		UseSegmentDataStore: true,
+		WatchOptions:        resource.WatchOptions{SettleDelay: time.Millisecond},
+	})
+	require.NoError(t, err)
+	RunStorageBackendBenchmark(t, backend, opts)
+}
+
 func TestIntegrationBenchmarkSQLKVStorageBackend(t *testing.T) {
 	for _, withRvManager := range []bool{true, false} {
 		t.Run(fmt.Sprintf("rvmanager=%t", withRvManager), func(t *testing.T) {
