@@ -1306,6 +1306,11 @@ export interface FeatureToggles {
   */
   unifiedStorageSearchDualReaderEnabled?: boolean;
   /**
+  * Use segment-backed data store for unified storage
+  * @default false
+  */
+  unifiedStorageSegmentDataStore?: boolean;
+  /**
   * Supports __from and __to macros that always use the dashboard level time range
   * @default false
   */

@@ -2059,6 +2059,15 @@ var (
 			Expression:   "false",
 		},
 		{
+			Name:            "unifiedStorageSegmentDataStore",
+			Description:     "Use segment-backed data store for unified storage",
+			Stage:           FeatureStageExperimental,
+			Owner:           grafanaSearchAndStorageSquad,
+			HideFromDocs:    true,
+			Expression:      "false",
+			RequiresRestart: true,
+		},
+		{
 			Name:         "dashboardLevelTimeMacros",
 			Description:  "Supports __from and __to macros that always use the dashboard level time range",
 			Stage:        FeatureStageExperimental,

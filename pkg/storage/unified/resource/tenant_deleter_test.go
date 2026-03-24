@@ -381,7 +381,7 @@ func TestDeleteTenant_MultipleGroupResources(t *testing.T) {
 		DeleteAfter: pastTime(),
 	}))
 
-	groupResources, err := ds.getGroupResources(t.Context())
+	groupResources, err := ds.GetGroupResources(t.Context())
 	require.NoError(t, err)
 
 	err = td.deleteTenant(t.Context(), "tenant-1", groupResources)

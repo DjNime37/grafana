@@ -163,6 +163,7 @@ func NewStorageBackend(
 		EventPruningInterval: cfg.EventPruningInterval,
 		SearchLookback:       cfg.SearchLookback,
 		WatchOptions:         resource.WatchOptions{SettleDelay: cfg.NotifierSettleDelay},
+		UseSegmentDataStore:  cfg.IsFeatureToggleEnabled("unifiedStorageSegmentDataStore"),
 	}
 
 	if cfg.EnableSQLKVCompatibilityMode {

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"iter"
+
+	"github.com/grafana/grafana/pkg/storage/unified/sql/db"
 )
 
 var _ DataStore = &segmentDataStore{}
@@ -74,4 +76,28 @@ func (s *segmentDataStore) Delete(ctx context.Context, key DataKey) error {
 
 func (s *segmentDataStore) GetResourceStats(ctx context.Context, nsr NamespacedResource, minCount int) ([]ResourceStats, error) {
 	return nil, fmt.Errorf("not implemented: GetResourceStats")
+}
+
+func (s *segmentDataStore) BatchDelete(ctx context.Context, keys []DataKey) error {
+	return fmt.Errorf("not implemented: BatchDelete")
+}
+
+func (s *segmentDataStore) GetGroupResources(ctx context.Context) ([]GroupResource, error) {
+	return nil, fmt.Errorf("not implemented: GetGroupResources")
+}
+
+func (s *segmentDataStore) ApplyBackwardsCompatibleChanges(_ context.Context, _ db.Tx, _ WriteEvent, _ DataKey) error {
+	panic("segmentDataStore does not support ApplyBackwardsCompatibleChanges")
+}
+
+func (s *segmentDataStore) DeleteLegacyResourceCollection(_ context.Context, _ db.ContextExecer, _, _, _ string) error {
+	panic("segmentDataStore does not support DeleteLegacyResourceCollection")
+}
+
+func (s *segmentDataStore) UpdateLegacyResourceHistoryBulk(_ context.Context, _ db.ContextExecer, _ DataKey, _, _, _ int64) error {
+	panic("segmentDataStore does not support UpdateLegacyResourceHistoryBulk")
+}
+
+func (s *segmentDataStore) SyncLegacyResourceFromHistory(_ context.Context, _ db.ContextExecer, _, _, _ string) error {
+	panic("segmentDataStore does not support SyncLegacyResourceFromHistory")
 }

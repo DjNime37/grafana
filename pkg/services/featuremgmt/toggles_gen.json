@@ -4924,6 +4924,21 @@
     },
     {
       "metadata": {
+        "name": "unifiedStorageSegmentDataStore",
+        "resourceVersion": "1774384419829",
+        "creationTimestamp": "2026-03-24T20:33:39Z"
+      },
+      "spec": {
+        "description": "Use segment-backed data store for unified storage",
+        "stage": "experimental",
+        "codeowner": "@grafana/search-and-storage",
+        "requiresRestart": true,
+        "hideFromDocs": true,
+        "expression": "false"
+      }
+    },
+    {
+      "metadata": {
         "name": "unlimitedLayoutsNesting",
         "resourceVersion": "1771434338561",
         "creationTimestamp": "2025-10-10T12:15:54Z"

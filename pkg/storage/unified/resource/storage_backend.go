@@ -54,7 +54,7 @@ type kvStorageBackend struct {
 	snowflake            *snowflake.Node
 	kv                   KV
 	bulkLock             *BulkLock
-	dataStore            *dataStore
+	dataStore            DataStore
 	eventStore           *eventStore
 	notifier             notifier
 	log                  log.Logger
@@ -126,6 +126,9 @@ type KVBackendOptions struct {
 	// SearchLookback is the duration subtracted from sinceRv in calls to ListModifiedSince.
 	// This guards against concurrent writes that commit slightly out-of-order. 0 means no lookback.
 	SearchLookback time.Duration
+
+	// UseSegmentDataStore uses the segment-backed DataStore instead of the KV-backed one.
+	UseSegmentDataStore bool
 }
 
 var (
@@ -176,10 +179,17 @@ func NewKVStorageBackend(opts KVBackendOptions) (KVBackend, error) {
 		garbageCollection.BatchWait = defaultGarbageCollectionBatchWait
 	}
 
+	var ds DataStore
+	if opts.UseSegmentDataStore {
+		ds = newSegmentDataStore(kv)
+	} else {
+		ds = newDataStore(kv)
+	}
+
 	backend := &kvStorageBackend{
 		kv:                   kv,
 		bulkLock:             NewBulkLock(),
-		dataStore:            newDataStore(kv),
+		dataStore:            ds,
 		eventStore:           eventStore,
 		notifier:             newNotifier(eventStore, notifierOptions{log: logger, useChannelNotifier: opts.UseChannelNotifier}),
 		watchOpts:            opts.WatchOptions.normalize(),
@@ -206,8 +216,13 @@ func NewKVStorageBackend(opts KVBackendOptions) (KVBackend, error) {
 	}
 
 	// Optionally start the tenant watcher.
+	// TenantWatcher/TenantDeleter use KV-specific internals and are not supported with the segment datastore.
 	if opts.TenantWatcherConfig != nil {
-		tw, err := NewTenantWatcher(ctx, backend.dataStore, func(ctx context.Context, event *WriteEvent) (int64, error) {
+		kvDS, ok := backend.dataStore.(*dataStore)
+		if !ok {
+			return nil, fmt.Errorf("tenant watcher requires the KV-backed datastore")
+		}
+		tw, err := NewTenantWatcher(ctx, kvDS, func(ctx context.Context, event *WriteEvent) (int64, error) {
 			return backend.WriteEvent(ctx, *event)
 		}, *opts.TenantWatcherConfig)
 		if err != nil {
@@ -218,7 +233,11 @@ func NewKVStorageBackend(opts KVBackendOptions) (KVBackend, error) {
 
 	// Optionally start the tenant deleter.
 	if opts.TenantDeleterConfig != nil {
-		td := NewTenantDeleter(backend.dataStore, newPendingDeleteStore(backend.kv), *opts.TenantDeleterConfig)
+		kvDS, ok := backend.dataStore.(*dataStore)
+		if !ok {
+			return nil, fmt.Errorf("tenant deleter requires the KV-backed datastore")
+		}
+		td := NewTenantDeleter(kvDS, newPendingDeleteStore(backend.kv), *opts.TenantDeleterConfig)
 		td.Start(ctx)
 		backend.tenantDeleter = td
 	}
@@ -411,7 +430,7 @@ func (b *kvStorageBackend) runGarbageCollection(ctx context.Context, cutoffTimeS
 	defer span.End()
 
 	// get group and resources
-	groupResources, err := b.dataStore.getGroupResources(ctx)
+	groupResources, err := b.dataStore.GetGroupResources(ctx)
 	if err != nil {
 		b.log.Error("failed to list group resources for garbage collection", "error", err)
 		return
@@ -736,7 +755,7 @@ func (k *kvStorageBackend) WriteEvent(ctx context.Context, event WriteEvent) (in
 				return "", fmt.Errorf("failed to write data: %w", err)
 			}
 
-			if err := k.dataStore.applyBackwardsCompatibleChanges(ctx, tx, event, dataKey); err != nil {
+			if err := k.dataStore.ApplyBackwardsCompatibleChanges(ctx, tx, event, dataKey); err != nil {
 				return "", fmt.Errorf("failed to apply backwards compatible updates: %w", err)
 			}
 
@@ -1484,7 +1503,7 @@ func (k *kvStorageBackend) processTrashEntries(
 		Sort:     SortOrderAsc,
 	}
 	keysIter := func(yield func(DataKey, error) bool) {
-		for rawKey, err := range k.dataStore.kv.Keys(ctx, dataSection, listOptions) {
+		for rawKey, err := range k.kv.Keys(ctx, dataSection, listOptions) {
 			if err != nil {
 				yield(DataKey{}, err)
 				return
@@ -1810,14 +1829,14 @@ func (b *kvStorageBackend) ProcessBulk(ctx context.Context, setting BulkSettings
 		}
 
 		previousCount := int64(len(historyKeys))
-		if err := b.dataStore.batchDelete(ctx, historyKeys); err != nil {
+		if err := b.dataStore.BatchDelete(ctx, historyKeys); err != nil {
 			b.log.Error("failed to delete collection: %s", err)
 			return rsp
 		}
 
 		// Delete legacy resource rows for this collection so they can be re-synced after import.
 		if b.rvManager != nil {
-			if err := b.dataStore.deleteLegacyResourceCollection(ctx, b.rvManager.DB(), key.Namespace, key.Group, key.Resource); err != nil {
+			if err := b.dataStore.DeleteLegacyResourceCollection(ctx, b.rvManager.DB(), key.Namespace, key.Group, key.Resource); err != nil {
 				b.log.Error("failed to delete legacy resource collection", "error", err)
 				return rsp
 			}
@@ -1834,7 +1853,7 @@ func (b *kvStorageBackend) ProcessBulk(ctx context.Context, setting BulkSettings
 	saved := make([]DataKey, 0)
 	rollback := func() {
 		// we don't have transactions in the kv store, so we simply delete everything we created
-		err = b.dataStore.batchDelete(ctx, saved)
+		err = b.dataStore.BatchDelete(ctx, saved)
 		if err != nil {
 			b.log.Error("failed to delete during rollback: %s", err)
 		}
@@ -1947,7 +1966,7 @@ func (b *kvStorageBackend) ProcessBulk(ctx context.Context, setting BulkSettings
 				previousRV = lastMicroRV[nameKey]
 			}
 
-			if err := b.dataStore.updateLegacyResourceHistoryBulk(ctx, b.rvManager.DB(), dataKey, microRV, previousRV, generation); err != nil {
+			if err := b.dataStore.UpdateLegacyResourceHistoryBulk(ctx, b.rvManager.DB(), dataKey, microRV, previousRV, generation); err != nil {
 				b.log.Error("failed to update legacy resource_history for bulk", "error", err)
 				return rsp
 			}
@@ -1958,7 +1977,7 @@ func (b *kvStorageBackend) ProcessBulk(ctx context.Context, setting BulkSettings
 	// Sync legacy resource table and bump RV counter for each collection.
 	if b.rvManager != nil && rsp.Error == nil {
 		for _, key := range setting.Collection {
-			if err := b.dataStore.syncLegacyResourceFromHistory(ctx, b.rvManager.DB(), key.Namespace, key.Group, key.Resource); err != nil {
+			if err := b.dataStore.SyncLegacyResourceFromHistory(ctx, b.rvManager.DB(), key.Namespace, key.Group, key.Resource); err != nil {
 				b.log.Error("failed to sync legacy resource from history", "error", err)
 				return rsp
 			}

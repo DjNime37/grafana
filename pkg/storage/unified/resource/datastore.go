@@ -89,6 +89,28 @@ type DataStore interface {
 
 	// GetResourceStats counts resources per namespace for a group/resource.
 	GetResourceStats(ctx context.Context, nsr NamespacedResource, minCount int) ([]ResourceStats, error)
+
+	// BatchDelete removes multiple DataKeys in batches.
+	BatchDelete(ctx context.Context, keys []DataKey) error
+
+	// GetGroupResources returns all distinct group/resource combinations in the store.
+	GetGroupResources(ctx context.Context) ([]GroupResource, error)
+
+	// ApplyBackwardsCompatibleChanges applies legacy SQL compatibility updates for a write event.
+	// No-op for datastores that don't need SQL backwards compatibility.
+	ApplyBackwardsCompatibleChanges(ctx context.Context, tx db.Tx, event WriteEvent, key DataKey) error
+
+	// DeleteLegacyResourceCollection removes legacy SQL resource rows for a collection.
+	// No-op for datastores that don't need SQL backwards compatibility.
+	DeleteLegacyResourceCollection(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error
+
+	// UpdateLegacyResourceHistoryBulk updates legacy SQL resource_history rows during bulk import.
+	// No-op for datastores that don't need SQL backwards compatibility.
+	UpdateLegacyResourceHistoryBulk(ctx context.Context, execer db.ContextExecer, dataKey DataKey, microRV int64, previousRV int64, generation int64) error
+
+	// SyncLegacyResourceFromHistory syncs the legacy SQL resource table from resource_history.
+	// No-op for datastores that don't need SQL backwards compatibility.
+	SyncLegacyResourceFromHistory(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error
 }
 
 var _ DataStore = &dataStore{}
@@ -597,7 +619,7 @@ func (d *dataStore) Delete(ctx context.Context, key DataKey) error {
 	return d.kv.Delete(ctx, dataSection, key.String())
 }
 
-func (n *dataStore) batchDelete(ctx context.Context, keys []DataKey) error {
+func (n *dataStore) BatchDelete(ctx context.Context, keys []DataKey) error {
 	for len(keys) > 0 {
 		batch := keys
 		if len(batch) > dataBatchSize {
@@ -633,7 +655,7 @@ func ParseKey(key string) (DataKey, error) {
 // If namespace is provided, only keys matching that namespace are considered.
 func (d *dataStore) GetResourceStats(ctx context.Context, nsr NamespacedResource, minCount int) ([]ResourceStats, error) {
 	// First, get all unique group/resource combinations in the store
-	groupResources, err := d.getGroupResources(ctx)
+	groupResources, err := d.GetGroupResources(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group resources: %w", err)
 	}
@@ -743,7 +765,7 @@ func (d *dataStore) processGroupResourceStats(ctx context.Context, groupResource
 // It efficiently discovers these by using the key ordering and PrefixRangeEnd to jump
 // between different group/resource prefixes without iterating through all keys.
 // Results are cached to improve performance.
-func (d *dataStore) getGroupResources(ctx context.Context) ([]GroupResource, error) {
+func (d *dataStore) GetGroupResources(ctx context.Context) ([]GroupResource, error) {
 	// Check cache first
 	if cached, found := d.cache.Get(groupResourcesCacheKey); found {
 		if cachedResults, ok := cached.([]GroupResource); ok {
@@ -895,7 +917,7 @@ func (req sqlKVLegacyCollectionRequest) Validate() error {
 // `resource` table, no longer used in the storage backend.
 //
 // TODO: remove when backwards compatibility is no longer needed.
-func (d *dataStore) applyBackwardsCompatibleChanges(ctx context.Context, tx db.Tx, event WriteEvent, key DataKey) error {
+func (d *dataStore) ApplyBackwardsCompatibleChanges(ctx context.Context, tx db.Tx, event WriteEvent, key DataKey) error {
 	_, isSQLKV := d.kv.(*kvpkg.SqlKV)
 	if !isSQLKV {
 		return nil
@@ -1039,7 +1061,7 @@ func isRowAlreadyExistsError(err error) bool {
 // deleteLegacyResourceCollection deletes all rows from the `resource` table for a given collection.
 // This is used during the delete phase of ProcessBulk to clear legacy resource rows before re-importing.
 // TODO: remove when backwards compatibility is no longer needed.
-func (d *dataStore) deleteLegacyResourceCollection(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error {
+func (d *dataStore) DeleteLegacyResourceCollection(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error {
 	_, isSQLKV := d.kv.(*kvpkg.SqlKV)
 	if !isSQLKV {
 		return nil
@@ -1061,7 +1083,7 @@ func (d *dataStore) deleteLegacyResourceCollection(ctx context.Context, execer d
 // During non Backwards Compatible bulk import, the row is inserted with only key_path and value set; this UPDATE fills in
 // group, resource, namespace, name, action, folder, resource_version, previous_resource_version, and generation.
 // TODO: remove when backwards compatibility is no longer needed.
-func (d *dataStore) updateLegacyResourceHistoryBulk(ctx context.Context, execer db.ContextExecer, dataKey DataKey, microRV int64, previousRV int64, generation int64) error {
+func (d *dataStore) UpdateLegacyResourceHistoryBulk(ctx context.Context, execer db.ContextExecer, dataKey DataKey, microRV int64, previousRV int64, generation int64) error {
 	_, isSQLKV := d.kv.(*kvpkg.SqlKV)
 	if !isSQLKV {
 		return nil
@@ -1101,7 +1123,7 @@ func (d *dataStore) updateLegacyResourceHistoryBulk(ctx context.Context, execer 
 // syncLegacyResourceFromHistory populates the `resource` table from `resource_history` for a given collection.
 // It selects the latest version of each resource (excluding deletes) and inserts them into the `resource` table.
 // TODO: remove when backwards compatibility is no longer needed.
-func (d *dataStore) syncLegacyResourceFromHistory(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error {
+func (d *dataStore) SyncLegacyResourceFromHistory(ctx context.Context, execer db.ContextExecer, namespace, group, resource string) error {
 	_, isSQLKV := d.kv.(*kvpkg.SqlKV)
 	if !isSQLKV {
 		return nil

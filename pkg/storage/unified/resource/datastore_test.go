@@ -3070,7 +3070,7 @@ func testDataStoreGetGroupResources(t *testing.T, ctx context.Context, ds *dataS
 	}
 
 	// Test GetGroupResources
-	results, err := ds.getGroupResources(ctx)
+	results, err := ds.GetGroupResources(ctx)
 	require.NoError(t, err)
 
 	// Should find exactly 4 unique group/resource combinations
@@ -3120,7 +3120,7 @@ func testDataStoreBatchDelete(t *testing.T, ctx context.Context, ds *dataStore) 
 		require.NoError(t, err)
 	}
 
-	err := ds.batchDelete(ctx, keys)
+	err := ds.BatchDelete(ctx, keys)
 	require.NoError(t, err)
 
 	// Verify all events were deleted

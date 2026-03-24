@@ -95,7 +95,7 @@ func (td *TenantDeleter) Stop() {
 // runDeletionPass iterates all pending-delete records and deletes data for
 // tenants whose deletion time has passed.
 func (td *TenantDeleter) runDeletionPass(ctx context.Context) {
-	groupResources, err := td.dataStore.getGroupResources(ctx)
+	groupResources, err := td.dataStore.GetGroupResources(ctx)
 	if err != nil {
 		td.log.Error("failed to list group resources", "error", err)
 		return
@@ -172,7 +172,7 @@ func (td *TenantDeleter) deleteTenant(ctx context.Context, tenantName string, gr
 			continue
 		}
 
-		if err := td.dataStore.batchDelete(ctx, keys); err != nil {
+		if err := td.dataStore.BatchDelete(ctx, keys); err != nil {
 			return err
 		}
 	}

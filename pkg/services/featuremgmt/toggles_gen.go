@@ -714,6 +714,10 @@ const (
 	// Enable dual reader for unified storage search
 	FlagUnifiedStorageSearchDualReaderEnabled = "unifiedStorageSearchDualReaderEnabled"
 
+	// FlagUnifiedStorageSegmentDataStore
+	// Use segment-backed data store for unified storage
+	FlagUnifiedStorageSegmentDataStore = "unifiedStorageSegmentDataStore"
+
 	// FlagAlertmanagerRemoteSecondaryWithRemoteState
 	// Starts Grafana in remote secondary mode pulling the latest state from the remote Alertmanager to avoid duplicate notifications.
 	FlagAlertmanagerRemoteSecondaryWithRemoteState = "alertmanagerRemoteSecondaryWithRemoteState"

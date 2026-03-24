@@ -275,7 +275,7 @@ func (tw *TenantWatcher) reconcileTenantPendingDelete(name string, deleteAfter s
 // tenantResourcesEditPendingDeleteLabel iterates every resource belonging to
 // the given tenant and adds or removes the pending-delete label.
 func (tw *TenantWatcher) tenantResourcesEditPendingDeleteLabel(tenantName string, addLabel bool) error {
-	groupResources, err := tw.dataStore.getGroupResources(tw.ctx)
+	groupResources, err := tw.dataStore.GetGroupResources(tw.ctx)
 	if err != nil {
 		return fmt.Errorf("getting group resources: %w", err)
 	}
