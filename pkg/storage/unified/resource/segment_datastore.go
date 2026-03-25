@@ -352,8 +352,6 @@ func (h *segTermHeap) Pop() any {
 	return item
 }
 
-// --- Unimplemented methods below ---
-
 func (s *segmentDataStore) Keys(ctx context.Context, key ListRequestKey, sort SortOrder) iter.Seq2[DataKey, error] {
 	if err := key.Validate(); err != nil {
 		return func(yield func(DataKey, error) bool) {
@@ -585,7 +583,74 @@ func (s *segmentDataStore) LastResourceVersion(ctx context.Context, key ListRequ
 }
 
 func (s *segmentDataStore) GetLatestAndPredecessor(ctx context.Context, key ListRequestKey) (DataKey, DataKey, error) {
-	return DataKey{}, DataKey{}, fmt.Errorf("not implemented: GetLatestAndPredecessor")
+	if err := key.Validate(); err != nil {
+		return DataKey{}, DataKey{}, fmt.Errorf("invalid data key: %w", err)
+	}
+	if key.Group == "" || key.Resource == "" || key.Name == "" {
+		return DataKey{}, DataKey{}, fmt.Errorf("group, resource or name is empty")
+	}
+
+	readers, err := s.openGroupResourceSegments(ctx, key.Group, key.Resource)
+	if err != nil {
+		return DataKey{}, DataKey{}, err
+	}
+	defer func() {
+		for _, r := range readers {
+			r.Close()
+		}
+	}()
+
+	targetDocID := segmentDocID(DataKey{
+		Group: key.Group, Resource: key.Resource,
+		Namespace: key.Namespace, Name: key.Name,
+	})
+
+	// Collect all versions for this _id across segments.
+	var allKeys []DataKey
+	for _, reader := range readers {
+		dict, err := reader.Dictionary("_id")
+		if err != nil {
+			return DataKey{}, DataKey{}, fmt.Errorf("failed to get _id dictionary: %w", err)
+		}
+
+		postings, err := dict.PostingsList([]byte(targetDocID), nil, nil)
+		if err != nil {
+			return DataKey{}, DataKey{}, fmt.Errorf("failed to get postings: %w", err)
+		}
+
+		pIter := postings.Iterator(false, false, false, nil)
+		for {
+			posting, err := pIter.Next()
+			if err != nil {
+				return DataKey{}, DataKey{}, fmt.Errorf("failed to iterate postings: %w", err)
+			}
+			if posting == nil {
+				break
+			}
+
+			dk, err := dataKeyFromSegment(reader, posting.Number())
+			if err != nil {
+				return DataKey{}, DataKey{}, err
+			}
+			allKeys = append(allKeys, dk)
+		}
+	}
+
+	if len(allKeys) == 0 {
+		return DataKey{}, DataKey{}, ErrNotFound
+	}
+
+	// Sort descending by rv — take top 2.
+	slices.SortFunc(allKeys, func(a, b DataKey) int {
+		return strings.Compare(b.String(), a.String()) // descending
+	})
+
+	latest := allKeys[0]
+	var predecessor DataKey
+	if len(allKeys) > 1 {
+		predecessor = allKeys[1]
+	}
+	return latest, predecessor, nil
 }
 
 func (s *segmentDataStore) GetLatestResourceKey(ctx context.Context, key GetRequestKey) (DataKey, error) {
