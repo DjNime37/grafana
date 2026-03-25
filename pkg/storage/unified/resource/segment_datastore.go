@@ -2,6 +2,7 @@ package resource
 
 import (
 	"bytes"
+	"container/heap"
 	"context"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"github.com/blevesearch/bleve/v2/document"
 	"github.com/blevesearch/bleve/v2/registry"
 	index "github.com/blevesearch/bleve_index_api"
+	segment_api "github.com/blevesearch/scorch_segment_api/v2"
+	"github.com/blevesearch/vellum"
 
 	kvpkg "github.com/grafana/grafana/pkg/storage/unified/resource/kv"
 	"github.com/grafana/grafana/pkg/storage/unified/resource/segment"
@@ -323,6 +326,32 @@ func (s *segmentDataStore) Delete(ctx context.Context, key DataKey) error {
 	return s.kv.Delete(ctx, manifestSection, manifestKVKey(key))
 }
 
+// --- Merge-sort infrastructure for streaming term dictionary iteration ---
+
+// segTermIter holds a dictionary iterator for one segment, tracking the current term.
+type segTermIter struct {
+	reader  *segment.SegmentReader
+	dict    segment_api.TermDictionary
+	iter    segment_api.DictionaryIterator
+	current *index.DictEntry
+}
+
+// segTermHeap is a min-heap of segTermIter, ordered by current term.
+type segTermHeap []*segTermIter
+
+func (h segTermHeap) Len() int            { return len(h) }
+func (h segTermHeap) Less(i, j int) bool   { return h[i].current.Term < h[j].current.Term }
+func (h segTermHeap) Swap(i, j int)        { h[i], h[j] = h[j], h[i] }
+func (h *segTermHeap) Push(x any)  { *h = append(*h, x.(*segTermIter)) }
+func (h *segTermHeap) Pop() any {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil
+	*h = old[:n-1]
+	return item
+}
+
 // --- Unimplemented methods below ---
 
 func (s *segmentDataStore) Keys(ctx context.Context, key ListRequestKey, sort SortOrder) iter.Seq2[DataKey, error] {
@@ -333,66 +362,221 @@ func (s *segmentDataStore) Keys(ctx context.Context, key ListRequestKey, sort So
 	}
 
 	return func(yield func(DataKey, error) bool) {
-		// List all manifest entries for this group/resource.
-		// Segments are scoped to (group, resource), so we always scan the full
-		// group/resource prefix — namespace and name filtering happens after
-		// opening segments, which is how compacted multi-doc segments work.
-		prefix := fmt.Sprintf("%s/%s/", key.Group, key.Resource)
+		// Open all segments for this group/resource.
+		readers, err := s.openGroupResourceSegments(ctx, key.Group, key.Resource)
+		if err != nil {
+			yield(DataKey{}, err)
+			return
+		}
+		defer func() {
+			for _, r := range readers {
+				r.Close()
+			}
+		}()
 
-		var allKeys []DataKey
-		for manifestKey, err := range s.kv.Keys(ctx, manifestSection, ListOptions{
-			StartKey: prefix,
-			EndKey:   PrefixRangeEnd(prefix),
-		}) {
+		if key.Name != "" {
+			// Exact _id lookup — no merge-sort needed, small result set.
+			s.keysExactName(readers, key, sort, yield)
+		} else {
+			// Range scan with streaming merge-sort across term dictionaries.
+			s.keysMergeSorted(readers, key, sort, yield)
+		}
+	}
+}
+
+// openGroupResourceSegments lists manifest entries and opens all segments for a (group, resource).
+func (s *segmentDataStore) openGroupResourceSegments(ctx context.Context, group, resource string) ([]*segment.SegmentReader, error) {
+	prefix := fmt.Sprintf("%s/%s/", group, resource)
+	var readers []*segment.SegmentReader
+
+	for manifestKey, err := range s.kv.Keys(ctx, manifestSection, ListOptions{
+		StartKey: prefix,
+		EndKey:   PrefixRangeEnd(prefix),
+	}) {
+		if err != nil {
+			for _, r := range readers {
+				r.Close()
+			}
+			return nil, err
+		}
+
+		segKey := manifestKey + ".zap"
+		reader, err := s.openSegment(ctx, segKey)
+		if err != nil {
+			for _, r := range readers {
+				r.Close()
+			}
+			return nil, fmt.Errorf("failed to open segment %s: %w", segKey, err)
+		}
+		readers = append(readers, reader)
+	}
+	return readers, nil
+}
+
+// keysExactName handles Keys when a specific name is provided.
+// Looks up the exact _id term in each segment's dictionary — O(log N) per segment.
+// Result set is small (bounded by version retention limit), so collect + sort is fine.
+func (s *segmentDataStore) keysExactName(
+	readers []*segment.SegmentReader,
+	key ListRequestKey,
+	sortOrder SortOrder,
+	yield func(DataKey, error) bool,
+) {
+	targetDocID := segmentDocID(DataKey{
+		Group: key.Group, Resource: key.Resource,
+		Namespace: key.Namespace, Name: key.Name,
+	})
+
+	var allKeys []DataKey
+	for _, reader := range readers {
+		dict, err := reader.Dictionary("_id")
+		if err != nil {
+			yield(DataKey{}, fmt.Errorf("failed to get _id dictionary: %w", err))
+			return
+		}
+
+		postings, err := dict.PostingsList([]byte(targetDocID), nil, nil)
+		if err != nil {
+			yield(DataKey{}, fmt.Errorf("failed to get postings: %w", err))
+			return
+		}
+
+		pIter := postings.Iterator(false, false, false, nil)
+		for {
+			posting, err := pIter.Next()
+			if err != nil {
+				yield(DataKey{}, fmt.Errorf("failed to iterate postings: %w", err))
+				return
+			}
+			if posting == nil {
+				break
+			}
+
+			dk, err := dataKeyFromSegment(reader, posting.Number())
 			if err != nil {
 				yield(DataKey{}, err)
 				return
 			}
+			allKeys = append(allKeys, dk)
+		}
+	}
 
-			// Manifest key is {group}/{resource}/{rv}, segment is {group}/{resource}/{rv}.zap.
-			segKey := manifestKey + ".zap"
-			reader, err := s.openSegment(ctx, segKey)
+	// Sort by rv (all keys share the same _id, so only rv differs).
+	slices.SortFunc(allKeys, func(a, b DataKey) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	if sortOrder == SortOrderDesc {
+		slices.Reverse(allKeys)
+	}
+
+	for _, dk := range allKeys {
+		if !yield(dk, nil) {
+			return
+		}
+	}
+}
+
+// keysMergeSorted handles Keys without a specific name — streaming merge-sort
+// across all segments' _id term dictionaries. Memory is O(segments) for the
+// heap + O(versions_per_resource) for each _id group.
+func (s *segmentDataStore) keysMergeSorted(
+	readers []*segment.SegmentReader,
+	key ListRequestKey,
+	sortOrder SortOrder,
+	yield func(DataKey, error) bool,
+) {
+	// Build the _id prefix range for filtering.
+	// _id format: {group}/{resource}/{namespace}/{name} or {group}/{resource}/{name}
+	var startKey, endKey string
+	if key.Namespace != "" {
+		startKey = fmt.Sprintf("%s/%s/%s/", key.Group, key.Resource, key.Namespace)
+	} else {
+		startKey = fmt.Sprintf("%s/%s/", key.Group, key.Resource)
+	}
+	endKey = PrefixRangeEnd(startKey)
+
+	// Initialize a dictionary iterator per segment and seed the heap.
+	h := &segTermHeap{}
+	for _, reader := range readers {
+		dict, err := reader.Dictionary("_id")
+		if err != nil {
+			yield(DataKey{}, fmt.Errorf("failed to get _id dictionary: %w", err))
+			return
+		}
+
+		iter := dict.AutomatonIterator(&vellum.AlwaysMatch{}, []byte(startKey), []byte(endKey))
+		entry, err := iter.Next()
+		if err != nil {
+			yield(DataKey{}, fmt.Errorf("failed to advance dictionary iterator: %w", err))
+			return
+		}
+		if entry != nil {
+			heap.Push(h, &segTermIter{reader: reader, dict: dict, iter: iter, current: entry})
+		}
+	}
+	heap.Init(h)
+
+	// Merge-sort: pop minimum term, collect all segments with that term,
+	// gather DataKeys for the _id group, sort by rv, yield.
+	var group []DataKey
+	for h.Len() > 0 {
+		minTerm := (*h)[0].current.Term
+
+		// Process all segments that have this term.
+		for h.Len() > 0 && (*h)[0].current.Term == minTerm {
+			ti := heap.Pop(h).(*segTermIter)
+
+			postings, err := ti.dict.PostingsList([]byte(minTerm), nil, nil)
 			if err != nil {
-				yield(DataKey{}, fmt.Errorf("failed to open segment %s: %w", segKey, err))
+				yield(DataKey{}, fmt.Errorf("failed to get postings for %s: %w", minTerm, err))
 				return
 			}
 
-			numDocs := reader.NumDocs()
-			for i := range numDocs {
-				dk, err := dataKeyFromSegment(reader, uint64(i))
+			pIter := postings.Iterator(false, false, false, nil)
+			for {
+				posting, err := pIter.Next()
 				if err != nil {
-					reader.Close()
+					yield(DataKey{}, fmt.Errorf("failed to iterate postings: %w", err))
+					return
+				}
+				if posting == nil {
+					break
+				}
+
+				dk, err := dataKeyFromSegment(ti.reader, posting.Number())
+				if err != nil {
 					yield(DataKey{}, err)
 					return
 				}
-
-				// Filter by namespace and name from the ListRequestKey.
-				if key.Namespace != "" && dk.Namespace != key.Namespace {
-					continue
-				}
-				if key.Name != "" && dk.Name != key.Name {
-					continue
-				}
-
-				allKeys = append(allKeys, dk)
+				group = append(group, dk)
 			}
 
-			reader.Close()
+			// Advance this segment's iterator.
+			next, err := ti.iter.Next()
+			if err != nil {
+				yield(DataKey{}, fmt.Errorf("failed to advance dictionary iterator: %w", err))
+				return
+			}
+			if next != nil {
+				ti.current = next
+				heap.Push(h, ti)
+			}
 		}
 
-		// Sort by DataKey.String() to match KV datastore ordering.
-		slices.SortFunc(allKeys, func(a, b DataKey) int {
+		// Sort the _id group by rv and yield.
+		slices.SortFunc(group, func(a, b DataKey) int {
 			return strings.Compare(a.String(), b.String())
 		})
-		if sort == SortOrderDesc {
-			slices.Reverse(allKeys)
+		if sortOrder == SortOrderDesc {
+			slices.Reverse(group)
 		}
 
-		for _, dk := range allKeys {
+		for _, dk := range group {
 			if !yield(dk, nil) {
 				return
 			}
 		}
+		group = group[:0]
 	}
 }
 
