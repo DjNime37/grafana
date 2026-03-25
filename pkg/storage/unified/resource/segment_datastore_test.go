@@ -13,6 +13,11 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		{"Save_And_Get", testDataStoreSaveAndGet},
 		{"Delete", testDataStoreDelete},
 		{"Keys", testDataStoreKeys},
+		{"GetLatestAndPredecessor", testDataStoreGetLatestAndPredecessor},
+		{"GetLatestResourceKey", testDataStoreGetLatestResourceKey},
+		{"GetLatestResourceKey_Deleted", testDataStoreGetLatestResourceKeyDeleted},
+		{"GetLatestResourceKey_NotFound", testDataStoreGetLatestResourceKeyNotFound},
+		{"GetResourceKeyAtRevision", testDataStoreGetResourceKeyAtRevision},
 	}
 
 	for _, tt := range implemented {
@@ -28,10 +33,6 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 	}{
 		{"List", testDataStoreList},
 		{"LastResourceVersion", testDataStoreLastResourceVersion},
-		{"GetLatestResourceKey", testDataStoreGetLatestResourceKey},
-		{"GetLatestResourceKey_Deleted", testDataStoreGetLatestResourceKeyDeleted},
-		{"GetLatestResourceKey_NotFound", testDataStoreGetLatestResourceKeyNotFound},
-		{"GetResourceKeyAtRevision", testDataStoreGetResourceKeyAtRevision},
 		{"ListLatestResourceKeys", testDataStoreListLatestResourceKeys},
 		{"ListLatestResourceKeys_Deleted", testDataStoreListLatestResourceKeysDeleted},
 		{"ListLatestResourceKeys_Multiple", testDataStoreListLatestResourceKeysMultiple},
@@ -39,7 +40,6 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		{"ListResourceKeysAtRevision_EmptyResults", testDataStoreListResourceKeysAtRevisionEmptyResults},
 		{"ListResourceKeysAtRevision_ResourcesNewerThanRevision", testDataStoreListResourceKeysAtRevisionResourcesNewerThanRevision},
 		{"GetResourceStats_Comprehensive", testDataStoreGetResourceStatsComprehensive},
-		{"GetLatestAndPredecessor", testDataStoreGetLatestAndPredecessor},
 		{"BatchGet", testDataStoreBatchGet},
 	}
 

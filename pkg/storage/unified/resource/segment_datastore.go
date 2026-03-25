@@ -654,11 +654,78 @@ func (s *segmentDataStore) GetLatestAndPredecessor(ctx context.Context, key List
 }
 
 func (s *segmentDataStore) GetLatestResourceKey(ctx context.Context, key GetRequestKey) (DataKey, error) {
-	return DataKey{}, fmt.Errorf("not implemented: GetLatestResourceKey")
+	return s.GetResourceKeyAtRevision(ctx, key, 0)
 }
 
 func (s *segmentDataStore) GetResourceKeyAtRevision(ctx context.Context, key GetRequestKey, rv int64) (DataKey, error) {
-	return DataKey{}, fmt.Errorf("not implemented: GetResourceKeyAtRevision")
+	if err := key.Validate(); err != nil {
+		return DataKey{}, fmt.Errorf("invalid get request key: %w", err)
+	}
+
+	readers, err := s.openGroupResourceSegments(ctx, key.Group, key.Resource)
+	if err != nil {
+		return DataKey{}, err
+	}
+	defer func() {
+		for _, r := range readers {
+			r.Close()
+		}
+	}()
+
+	targetDocID := segmentDocID(DataKey{
+		Group: key.Group, Resource: key.Resource,
+		Namespace: key.Namespace, Name: key.Name,
+	})
+
+	// Collect all versions for this _id across segments.
+	var best DataKey
+	found := false
+	for _, reader := range readers {
+		dict, err := reader.Dictionary("_id")
+		if err != nil {
+			return DataKey{}, fmt.Errorf("failed to get _id dictionary: %w", err)
+		}
+
+		postings, err := dict.PostingsList([]byte(targetDocID), nil, nil)
+		if err != nil {
+			return DataKey{}, fmt.Errorf("failed to get postings: %w", err)
+		}
+
+		pIter := postings.Iterator(false, false, false, nil)
+		for {
+			posting, err := pIter.Next()
+			if err != nil {
+				return DataKey{}, fmt.Errorf("failed to iterate postings: %w", err)
+			}
+			if posting == nil {
+				break
+			}
+
+			dk, err := dataKeyFromSegment(reader, posting.Number())
+			if err != nil {
+				return DataKey{}, err
+			}
+
+			// Skip deleted.
+			if dk.Action == DataActionDeleted {
+				continue
+			}
+			// If rv > 0, skip versions newer than the target.
+			if rv > 0 && dk.ResourceVersion > rv {
+				continue
+			}
+			// Keep the highest qualifying rv.
+			if !found || dk.ResourceVersion > best.ResourceVersion {
+				best = dk
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		return DataKey{}, ErrNotFound
+	}
+	return best, nil
 }
 
 func (s *segmentDataStore) ListLatestResourceKeys(ctx context.Context, key ListRequestKey) iter.Seq2[DataKey, error] {
