@@ -12,6 +12,7 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 	}{
 		{"Save_And_Get", testDataStoreSaveAndGet},
 		{"Delete", testDataStoreDelete},
+		{"Keys", testDataStoreKeys},
 	}
 
 	for _, tt := range implemented {
@@ -26,7 +27,6 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		fn   func(*testing.T, context.Context, DataStore)
 	}{
 		{"List", testDataStoreList},
-		{"Keys", testDataStoreKeys},
 		{"LastResourceVersion", testDataStoreLastResourceVersion},
 		{"GetLatestResourceKey", testDataStoreGetLatestResourceKey},
 		{"GetLatestResourceKey_Deleted", testDataStoreGetLatestResourceKeyDeleted},
