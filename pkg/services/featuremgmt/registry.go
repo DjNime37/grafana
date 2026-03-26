@@ -199,6 +199,22 @@ var (
 			Expression:  "false",
 		},
 		{
+			Name:         "logsExploreTableVisualisation",
+			Description:  "A table visualisation for logs in Explore",
+			Stage:        FeatureStageGeneralAvailability,
+			Expression:   "true", // enabled by default,
+			FrontendOnly: true,
+			Owner:        grafanaObservabilityLogsSquad,
+		},
+		{
+			Name:         "queryHistoryLocalOnly",
+			Description:  "Store query history in browser IndexedDB instead of server-side",
+			Stage:        FeatureStageExperimental,
+			FrontendOnly: true,
+			Owner:        grafanaObservabilityLogsSquad,
+			Expression:   "false",
+		},
+		{
 			Name:        "awsDatasourcesTempCredentials",
 			Description: "Support temporary security credentials in AWS plugins for Grafana Cloud customers",
 			Stage:       FeatureStageGeneralAvailability,
