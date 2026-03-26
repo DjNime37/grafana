@@ -143,7 +143,12 @@ export function InstanceRow({
             to: typeof timeRange.raw.to === 'string' ? timeRange.raw.to : timeRange.raw.to.toISOString(),
           }}
         >
-          <InstanceDetailsDrawer ruleUID={ruleUID} instanceLabels={instance.labels} onClose={handleDrawerClose} />
+          <InstanceDetailsDrawer
+            ruleUID={ruleUID}
+            instanceLabels={instance.labels}
+            commonLabels={commonLabels}
+            onClose={handleDrawerClose}
+          />
         </SceneContextProvider>
       )}
     </>
