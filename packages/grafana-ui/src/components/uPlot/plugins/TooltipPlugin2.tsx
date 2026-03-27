@@ -118,8 +118,7 @@ export const TooltipPlugin2 = ({
   const [offsetX, setOffsetX] = useState<number>(0);
   const [offsetY, setOffsetY] = useState<number>(0);
   const [closestSeriesIdx, setClosestSeriesIdx] = useState<number | null>(null);
-  const [plotVisible, setPlotVisible] = useState<boolean>(false);
-  const [viaSync, setViaSync] = useState(false);
+  // const [plotVisible, setPlotVisible] = useState<boolean>(false);
   const [winWid, setWinWidth] = useState(0);
   const [winHgt, setWinHeight] = useState(0);
   const [pendingPinned, setPendingPinned] = useState(false);
@@ -139,119 +138,6 @@ export const TooltipPlugin2 = ({
   if (portalRoot.current == null) {
     portalRoot.current = getPortalContainer();
   }
-
-  // Init uplot
-  const plot = usePlotConfigHook(config, 'init', (u) => {
-    // detect shiftKey and mutate drag mode from x-only to y-only
-    if (clientZoom) {
-      u.over.addEventListener(
-        'mousedown',
-        (e) => {
-          if (!maybeZoomAction(e)) {
-            return;
-          }
-
-          if (e.button === 0 && e.shiftKey) {
-            setYDrag(true);
-
-            u.cursor.drag!.x = false;
-            u.cursor.drag!.y = true;
-
-            let onUp = (e: MouseEvent) => {
-              u.cursor.drag!.x = true;
-              u.cursor.drag!.y = false;
-              document.removeEventListener('mouseup', onUp, true);
-            };
-
-            document.addEventListener('mouseup', onUp, true);
-          }
-        },
-        true
-      );
-    }
-
-    // add zoom-in cursor during drag-to-zoom interaction
-    if (queryZoom != null || clientZoom) {
-      u.over.addEventListener(
-        'mousedown',
-        (e) => {
-          if (!maybeZoomAction(e)) {
-            return;
-          }
-
-          if (e.button === 0) {
-            u.over.classList.add('zoom-drag');
-
-            let onUp = () => {
-              u.over.classList.remove('zoom-drag');
-              document.removeEventListener('mouseup', onUp, true);
-            };
-
-            document.addEventListener('mouseup', onUp, true);
-          }
-        },
-        true
-      );
-    }
-
-    // this handles pinning, 0-width range selection, and one-click
-    // @todo clean up event listener on uplot destruct
-    u.over.addEventListener('click', (e) => {
-      if (!u.cursor) {
-        throw new Error('[TooltipPlugin2::onClick] cursor not defined!');
-      }
-      if (u.cursor.left === undefined) {
-        throw new Error('[TooltipPlugin2::onClick] cursor left undefined!');
-      }
-
-      console.log('[TooltipPlugin2::onClick]', { e, over: u.over, ctrl: e.ctrlKey, meta: e.metaKey });
-      if (e.target === u.over) {
-        console.log('[TooltipPlugin2::onClick] - target is u.over');
-        const isWipAnnotationModifierActive = e.ctrlKey || e.metaKey;
-        if (isWipAnnotationModifierActive) {
-          let xVal;
-
-          const isXAxisHorizontal = u.scales.x.ori === 0;
-          if (isXAxisHorizontal) {
-            xVal = u.posToVal(u.cursor.left, 'x');
-          } else {
-            xVal = u.posToVal(u.select.top + u.select.height, 'x');
-          }
-
-          setAnnotationRange({
-            from: xVal,
-            to: xVal,
-          });
-
-          console.log('[TooltipPlugin2::onClick] - renderTooltip (anno)');
-          renderTooltip(u, false);
-        }
-        // if tooltip visible, not pinned, and within proximity to a series/point
-        else if (isHovering && !isPinned && closestSeriesIdx != null) {
-          const seriesIndex = seriesIdxs[closestSeriesIdx];
-          if (seriesIndex === null) {
-            throw new Error('[TooltipPlugin2::onClick] - seriesIndex not defined!');
-          }
-          setDataLinks(getLinksRef.current(closestSeriesIdx, seriesIndex));
-          setAdHocFilters(getAdHocFiltersRef.current(closestSeriesIdx, seriesIndex));
-
-          const oneClickLink = dataLinks.find((dataLink) => dataLink.oneClick === true);
-
-          if (oneClickLink != null) {
-            window.open(oneClickLink.href, oneClickLink.target ?? '_self');
-          } else {
-            setIsPinned(true);
-            console.log('[TooltipPlugin2::onClick] - renderTooltip (hover)');
-            renderTooltip(u, true);
-          }
-        }
-      }
-    });
-
-    updateWinSize(u);
-
-    console.log('init complete');
-  });
 
   // Refs
   const sizeRef = useRef<TooltipContainerSize | undefined>(undefined);
@@ -314,15 +200,15 @@ export const TooltipPlugin2 = ({
 
   // in some ways this is similar to ClickOutsideWrapper.tsx
   const downEventOutside = useCallback(
-    (e: Event) => {
-      if (!plot) {
+    (u: uPlot, e: Event) => {
+      if (!u) {
         throw new Error('[TooltipPlugin2::downEventOutside] plot is undefined!');
       }
       if (e instanceof KeyboardEvent) {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          dismiss(plot);
+          dismiss(u);
         }
         return;
       }
@@ -332,10 +218,10 @@ export const TooltipPlugin2 = ({
 
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
       if ((e.target as HTMLElement).closest(isModalOrPortaled) == null) {
-        dismiss(plot);
+        dismiss(u);
       }
     },
-    [dismiss, plot]
+    [dismiss]
   );
 
   // @todo externalize and pass in all state vars
@@ -344,6 +230,9 @@ export const TooltipPlugin2 = ({
       if (!u) {
         throw new Error('[TooltipPlugin2::setTooltipContent] plot not initiated!');
       }
+
+      // @todo DRY
+      const viaSync = u.cursor.event == null;
 
       setPendingRender(false);
       let pointerEventsStyles: Partial<React.CSSProperties> | null = null;
@@ -355,19 +244,20 @@ export const TooltipPlugin2 = ({
         u.cursor['_lock'] = _isPinned;
 
         if (isPinned) {
-          document.addEventListener('mousedown', downEventOutside, true);
-          document.addEventListener('keydown', downEventOutside, true);
+          document.addEventListener('mousedown', (e) => downEventOutside(u, e), true);
+          document.addEventListener('keydown', (e) => downEventOutside(u, e), true);
         } else {
-          document.removeEventListener('mousedown', downEventOutside, true);
-          document.removeEventListener('keydown', downEventOutside, true);
+          document.removeEventListener('mousedown', (e) => downEventOutside(u, e), true);
+          document.removeEventListener('keydown', (e) => downEventOutside(u, e), true);
         }
 
         setPendingPinned(false);
       }
 
       // @todo clean up
-      // setStyle(pointerEventsStyles ?? defaultStyles);
-      // setIsPinned(isPinned);
+      setStyle(pointerEventsStyles ?? defaultStyles);
+      setIsPinned(isPinned);
+
       if (hover !== isHovering) {
         console.log('[TooltipPlugin2::setTooltipContent] setIsHovering');
         setIsHovering(hover);
@@ -417,7 +307,6 @@ export const TooltipPlugin2 = ({
       pendingPinned,
       persistentLinks,
       seriesIdxs,
-      viaSync,
     ]
   );
 
@@ -425,33 +314,7 @@ export const TooltipPlugin2 = ({
     return seriesIdxs.some((v, i) => i > 0 && v != null);
   }, [seriesIdxs]);
 
-  // set tooltip on annotation range state change
-  useEffect(() => {
-    if (!plot) {
-      return;
-    }
-
-    setTooltipContent(plot);
-  }, [annotationRange, plot, setTooltipContent]);
-
-  // set tooltip on hovering state change
-  useEffect(() => {
-    if (!plot) {
-      return;
-    }
-
-    console.log('useEffect::onHover', { isHovering, seriesIdxs, offsetY, offsetX });
-
-    if (isHovering) {
-      queueMicrotask(() => setTooltipContent(plot, true));
-    } else {
-      // @todo delay/debounce (100ms)
-      setTooltipContent(plot, false);
-      console.log('winWid', winWid);
-    }
-    // @todo audit these
-  }, [isHovering, plot, seriesIdxs, offsetX, offsetY, plotVisible, yDrag, isPinned, winHgt, winWid, setTooltipContent]);
-
+  // @todo don't set to state
   const updateWinSize = useCallback(
     (u: uPlot) => {
       isHovering && !isPinned && dismiss(u);
@@ -462,273 +325,355 @@ export const TooltipPlugin2 = ({
     [dismiss, isHovering, isPinned]
   );
 
-  const updatePlotVisible = useCallback(
-    (plot: uPlot | null) => {
-      if (!plot) {
-        throw new Error('[updatePlotVisible] Plot not initiated!');
-      }
-      setPlotVisible(
-        plot.rect.bottom <= winHgt && plot.rect.top >= 0 && plot.rect.left >= 0 && plot.rect.right <= winWid
-      );
+  const isPlotVisible = useCallback(
+    (u: uPlot) => {
+      return u.rect.bottom <= winHgt && u.rect.top >= 0 && u.rect.left >= 0 && u.rect.right <= winWid;
     },
     [winHgt, winWid]
   );
 
-  const isUserHovering = useCallback(() => {
-    return viaSync
-      ? plotVisible && hasSomeSeriesIdx() && syncTooltip
-      : closestSeriesIdx != null || (hoverMode === TooltipHoverMode.xAll && hasSomeSeriesIdx());
-  }, [viaSync, plotVisible, hasSomeSeriesIdx, syncTooltip, closestSeriesIdx, hoverMode]);
+  const isUserHovering = useCallback(
+    (u: uPlot, viaSync: boolean) => {
+      if (!u) {
+        throw new Error('[isUserHovering]:: plot not defined!');
+      }
 
-  // fires on data value hovers/unhovers
-  usePlotConfigHook(config, 'setLegend', (u) => {
-    if (!u.cursor.idxs) {
-      throw new Error('cursor must be defined!');
-    }
+      console.log('isUserHovering', {
+        isPlotVis: isPlotVisible(u),
+        hasSomeSeriesIdx: hasSomeSeriesIdx(),
+        syncTooltip,
+        closestSeriesIdx,
+      });
 
-    const seriesIndiciesTmp = u.cursor.idxs.slice();
-    setSeriesIdxs(seriesIndiciesTmp);
-    if (persistentLinks.length === 0) {
-      setPersistentLinks(
-        seriesIndiciesTmp.map((v, seriesIdx) => {
-          if (seriesIdx > 0) {
-            const links = getDataLinks(seriesIdx, seriesIndiciesTmp[seriesIdx]!);
-            const oneClickLink = links.find((dataLink) => dataLink.oneClick === true);
+      return viaSync
+        ? isPlotVisible(u) && hasSomeSeriesIdx() && syncTooltip
+        : closestSeriesIdx != null || (hoverMode === TooltipHoverMode.xAll && hasSomeSeriesIdx());
+    },
+    [isPlotVisible, hasSomeSeriesIdx, syncTooltip, closestSeriesIdx, hoverMode]
+  );
 
-            if (oneClickLink) {
-              return [oneClickLink];
-            }
-          }
+  /**
+   * fires on data value hovers/unhovers
+   */
+  const setLegend = useCallback(
+    (u: uPlot) => {
+      if (!u.cursor.idxs) {
+        throw new Error('cursor must be defined!');
+      }
 
-          return [];
-        })
-      );
-    }
+      const seriesIndiciesTmp = u.cursor.idxs.slice();
+      setSeriesIdxs(seriesIndiciesTmp);
+      if (persistentLinks.length === 0) {
+        setPersistentLinks(
+          seriesIndiciesTmp.map((_, seriesIdx) => {
+            if (seriesIdx > 0) {
+              const links = getDataLinks(seriesIdx, seriesIndiciesTmp[seriesIdx]!);
+              const oneClickLink = links.find((dataLink) => dataLink.oneClick === true);
 
-    setViaSync(u.cursor.event == null);
-    let prevIsHovering = isHovering;
-    const currentIsHovering = isUserHovering();
-
-    if (currentIsHovering || currentIsHovering !== prevIsHovering) {
-      console.log('[TooltipPlugin2::setLegend] renderTooltip hover - true');
-      renderTooltip(u, true);
-    } else {
-      console.log('[TooltipPlugin2::setLegend] renderTooltip hover - false');
-      renderTooltip(u, false);
-    }
-  });
-  usePlotConfigHook(config, 'setSelect', (u) => {
-    const isXAxisHorizontal = u.scales.x.ori === 0;
-
-    if (!viaSync && (clientZoom || queryZoom != null)) {
-      if (maybeZoomAction(u.cursor!.event)) {
-        if (onSelectRange != null) {
-          let selections: RangeSelection2D[] = [];
-
-          if (!u.cursor.drag) {
-            throw new Error('[TooltipPlugin2::hooks::setSelect] cursor drag offset not defined!');
-          }
-
-          const yDrag = Boolean(u.cursor.drag.y);
-          const xDrag = Boolean(u.cursor.drag.x);
-
-          let xSel = null;
-          const ySels: RangeSelection1D[] = [];
-
-          // get x selection
-          if (xDrag) {
-            xSel = {
-              from: isXAxisHorizontal
-                ? u.posToVal(u.select.left!, 'x')
-                : u.posToVal(u.select.top + u.select.height, 'x'),
-              to: isXAxisHorizontal ? u.posToVal(u.select.left! + u.select.width, 'x') : u.posToVal(u.select.top, 'x'),
-            };
-          }
-
-          // get y selections
-          if (yDrag) {
-            config.scales.forEach((scale) => {
-              const key = scale.props.scaleKey;
-
-              if (key !== 'x') {
-                let ySel = {
-                  from: isXAxisHorizontal
-                    ? u.posToVal(u.select.top + u.select.height, key)
-                    : u.posToVal(u.select.left + u.select.width, key),
-                  to: isXAxisHorizontal ? u.posToVal(u.select.top, key) : u.posToVal(u.select.left, key),
-                };
-
-                ySels.push(ySel);
-              }
-            });
-          }
-
-          if (xDrag) {
-            if (yDrag) {
-              // x + y
-              selections = ySels.map((ySel) => ({ x: xSel!, y: ySel }));
-            } else {
-              // x only
-              selections = [{ x: xSel! }];
-            }
-          } else {
-            if (yDrag) {
-              // y only
-              selections = ySels.map((ySel) => ({ y: ySel }));
-            }
-          }
-
-          onSelectRange(selections);
-        } else if (clientZoom && yDrag) {
-          if (u.select.height >= MIN_ZOOM_DIST) {
-            for (let key in u.scales!) {
-              if (key !== 'x') {
-                const maxY = isXAxisHorizontal
-                  ? u.posToVal(u.select.top, key)
-                  : u.posToVal(u.select.left + u.select.width, key);
-                const minY = isXAxisHorizontal
-                  ? u.posToVal(u.select.top + u.select.height, key)
-                  : u.posToVal(u.select.left, key);
-
-                u.setScale(key, { min: minY, max: maxY });
+              if (oneClickLink) {
+                return [oneClickLink];
               }
             }
 
-            setYZoomed(true);
-          }
+            return [];
+          })
+        );
+      }
 
-          setYDrag(false);
-        } else if (queryZoom != null) {
-          if (u.select.width >= MIN_ZOOM_DIST) {
-            const minX = isXAxisHorizontal
-              ? u.posToVal(u.select.left, 'x')
-              : u.posToVal(u.select.top + u.select.height, 'x');
-            const maxX = isXAxisHorizontal
-              ? u.posToVal(u.select.left + u.select.width, 'x')
-              : u.posToVal(u.select.top, 'x');
+      const viaSync = u.cursor.event == null;
+      const prevIsHovering = isHovering;
+      const currentIsHovering = isUserHovering(u, viaSync);
 
-            queryZoom({ from: minX, to: maxX });
-
-            setYZoomed(false);
-          }
-        }
-      } else {
-        console.log('[TooltipPlugin2::setSelect] setAnnotationRange');
-        setAnnotationRange({
-          from: isXAxisHorizontal ? u.posToVal(u.select.left, 'x') : u.posToVal(u.select.top + u.select.height, 'x'),
-          to: isXAxisHorizontal ? u.posToVal(u.select.left + u.select.width, 'x') : u.posToVal(u.select.top, 'x'),
-        });
-
-        console.log('[TooltipPlugin2::setSelect] renderTooltip');
+      if (currentIsHovering || currentIsHovering !== prevIsHovering) {
+        console.log('[TooltipPlugin2::setLegend] renderTooltip hover - true');
         renderTooltip(u, true);
-      }
-    }
-
-    // manually hide selected region (since cursor.drag.setScale = false)
-    u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false);
-  });
-  usePlotConfigHook(config, 'setData', (u) => {
-    setYZoomed(false);
-    setYDrag(false);
-
-    if (isPinned) {
-      dismiss(u);
-    }
-  });
-
-  // e.g. to highlight the hovered/closest series
-  // TODO: we only need this for multi/all mode?
-  // fires on series focus/proximity changes
-  usePlotConfigHook(config, 'setSeries', (u, seriesIdx) => {
-    setClosestSeriesIdx(seriesIdx);
-
-    setViaSync(u.cursor.event == null);
-    const hovering = isUserHovering();
-    if (hovering) {
-      console.log('[TooltipPlugin2::setSeries] renderTooltip');
-      renderTooltip(u);
-    }
-  });
-  usePlotConfigHook(config, 'ready', updatePlotVisible);
-
-  // fires on mousemoves
-  usePlotConfigHook(config, 'setCursor', (u) => {
-    if (!sizeRef.current) {
-      console.warn('[TooltipPlugin2::setCursor] sizeRef not defined!');
-      return;
-    }
-
-    setViaSync(u.cursor.event == null);
-
-    if (!isHovering) {
-      console.warn('[TooltipPlugin2::setCursor] not hovering!');
-      return;
-    }
-
-    let { left = -10, top = -10 } = u.cursor;
-
-    if (left >= 0 || top >= 0) {
-      let clientX = u.rect.left + left;
-      let clientY = u.rect.top + top;
-
-      let transform = '';
-
-      let { width, height } = sizeRef.current;
-
-      width += TOOLTIP_OFFSET;
-      height += TOOLTIP_OFFSET;
-
-      if (offsetY !== 0) {
-        if (clientY + height < winHgt || clientY - height < 0) {
-          setOffsetY(0);
-        } else if (offsetY !== -height) {
-          setOffsetY(-height);
-        }
       } else {
-        if (clientY + height > winHgt && clientY - height >= 0) {
-          setOffsetY(-height);
+        console.log('[TooltipPlugin2::setLegend] renderTooltip hover - false');
+        renderTooltip(u, false);
+      }
+    },
+    [getDataLinks, isHovering, isUserHovering, persistentLinks.length, renderTooltip]
+  );
+  const setSelect = useCallback(
+    (u: uPlot) => {
+      const isXAxisHorizontal = u.scales.x.ori === 0;
+      const viaSync = u.cursor.event == null;
+
+      if (!viaSync && (clientZoom || queryZoom != null)) {
+        if (maybeZoomAction(u.cursor!.event)) {
+          if (onSelectRange != null) {
+            let selections: RangeSelection2D[] = [];
+
+            if (!u.cursor.drag) {
+              throw new Error('[TooltipPlugin2::hooks::setSelect] cursor drag offset not defined!');
+            }
+
+            const yDrag = Boolean(u.cursor.drag.y);
+            const xDrag = Boolean(u.cursor.drag.x);
+
+            let xSel = null;
+            const ySels: RangeSelection1D[] = [];
+
+            // get x selection
+            if (xDrag) {
+              xSel = {
+                from: isXAxisHorizontal
+                  ? u.posToVal(u.select.left!, 'x')
+                  : u.posToVal(u.select.top + u.select.height, 'x'),
+                to: isXAxisHorizontal
+                  ? u.posToVal(u.select.left! + u.select.width, 'x')
+                  : u.posToVal(u.select.top, 'x'),
+              };
+            }
+
+            // get y selections
+            if (yDrag) {
+              config.scales.forEach((scale) => {
+                const key = scale.props.scaleKey;
+
+                if (key !== 'x') {
+                  const ySel = {
+                    from: isXAxisHorizontal
+                      ? u.posToVal(u.select.top + u.select.height, key)
+                      : u.posToVal(u.select.left + u.select.width, key),
+                    to: isXAxisHorizontal ? u.posToVal(u.select.top, key) : u.posToVal(u.select.left, key),
+                  };
+
+                  ySels.push(ySel);
+                }
+              });
+            }
+
+            if (xDrag) {
+              if (yDrag) {
+                // x + y
+                selections = ySels.map((ySel) => ({ x: xSel!, y: ySel }));
+              } else {
+                // x only
+                selections = [{ x: xSel! }];
+              }
+            } else {
+              if (yDrag) {
+                // y only
+                selections = ySels.map((ySel) => ({ y: ySel }));
+              }
+            }
+
+            onSelectRange(selections);
+          } else if (clientZoom && yDrag) {
+            if (u.select.height >= MIN_ZOOM_DIST) {
+              for (const key in u.scales) {
+                if (key !== 'x') {
+                  const maxY = isXAxisHorizontal
+                    ? u.posToVal(u.select.top, key)
+                    : u.posToVal(u.select.left + u.select.width, key);
+                  const minY = isXAxisHorizontal
+                    ? u.posToVal(u.select.top + u.select.height, key)
+                    : u.posToVal(u.select.left, key);
+
+                  u.setScale(key, { min: minY, max: maxY });
+                }
+              }
+
+              setYZoomed(true);
+            }
+
+            setYDrag(false);
+          } else if (queryZoom != null) {
+            if (u.select.width >= MIN_ZOOM_DIST) {
+              const minX = isXAxisHorizontal
+                ? u.posToVal(u.select.left, 'x')
+                : u.posToVal(u.select.top + u.select.height, 'x');
+              const maxX = isXAxisHorizontal
+                ? u.posToVal(u.select.left + u.select.width, 'x')
+                : u.posToVal(u.select.top, 'x');
+
+              queryZoom({ from: minX, to: maxX });
+
+              setYZoomed(false);
+            }
+          }
+        } else {
+          console.log('[TooltipPlugin2::setSelect] setAnnotationRange');
+          setAnnotationRange({
+            from: isXAxisHorizontal ? u.posToVal(u.select.left, 'x') : u.posToVal(u.select.top + u.select.height, 'x'),
+            to: isXAxisHorizontal ? u.posToVal(u.select.left + u.select.width, 'x') : u.posToVal(u.select.top, 'x'),
+          });
+
+          console.log('[TooltipPlugin2::setSelect] renderTooltip');
+          renderTooltip(u, true);
         }
       }
 
-      if (offsetX !== 0) {
-        if (clientX + width < winWid || clientX - width < 0) {
-          setOffsetX(0);
-        } else if (offsetX !== -width) {
-          setOffsetX(-width);
-        }
-      } else {
-        if (clientX + width > winWid && clientX - width >= 0) {
-          setOffsetX(-width);
-        }
+      // manually hide selected region (since cursor.drag.setScale = false)
+      u.setSelect({ left: 0, width: 0, top: 0, height: 0 }, false);
+    },
+    [clientZoom, config.scales, onSelectRange, queryZoom, renderTooltip, yDrag]
+  );
+  const setData = useCallback(
+    (u: uPlot) => {
+      setYZoomed(false);
+      setYDrag(false);
+
+      if (isPinned) {
+        dismiss(u);
       }
+    },
+    [dismiss, isPinned]
+  );
 
-      const shiftX = clientX + (offsetX === 0 ? TOOLTIP_OFFSET : -TOOLTIP_OFFSET);
-      const shiftY = clientY + (offsetY === 0 ? TOOLTIP_OFFSET : -TOOLTIP_OFFSET);
+  /**
+   * fires on series focus/proximity changes
+   * e.g. to highlight the hovered/closest series
+   * TODO: we only need this for multi/all mode?
+   */
+  const setSeries = useCallback(
+    (u: uPlot, seriesIdx: number | null) => {
+      console.log('[TooltipPlugin2::setSeries] setClosestSeriesIdx', seriesIdx);
+      setClosestSeriesIdx(seriesIdx);
 
-      const reflectX = offsetX === 0 ? '' : 'translateX(-100%)';
-      const reflectY = offsetY === 0 ? '' : 'translateY(-100%)';
-
-      // TODO: to a transition only when switching sides
-      // transition: transform 100ms;
-
-      transform = `translateX(${shiftX}px) ${reflectX} translateY(${shiftY}px) ${reflectY}`;
-
-      // @todo fix mutating domRef styles
-      if (domRef.current != null) {
-        console.warn('[TooltipPlugin2::setCursor] transform', transform);
-        domRef.current.style.transform = transform;
-      } else {
-        console.warn('[TooltipPlugin2::setCursor] renderTooltip', { transform, style });
-        setStyle({ ...style, transform });
+      const viaSync = u.cursor.event == null;
+      const hovering = isUserHovering(u, viaSync);
+      if (hovering) {
+        console.log('[TooltipPlugin2::setSeries] renderTooltip');
         renderTooltip(u);
       }
-    }
-  });
+    },
+    [isUserHovering, renderTooltip]
+  );
 
-  useLayoutEffect(() => {
+  /**
+   * fires on mouse moves
+   */
+  const setCursor = useCallback(
+    (u: uPlot) => {
+      if (!sizeRef.current) {
+        console.warn('[TooltipPlugin2::setCursor] sizeRef not defined!');
+        return;
+      }
+
+      if (!isHovering) {
+        console.warn('[TooltipPlugin2::setCursor] not hovering!');
+        return;
+      }
+
+      const { left = -10, top = -10 } = u.cursor;
+
+      if (left >= 0 || top >= 0) {
+        const clientX = u.rect.left + left;
+        const clientY = u.rect.top + top;
+
+        let transform = '';
+
+        let { width, height } = sizeRef.current;
+        width += TOOLTIP_OFFSET;
+        height += TOOLTIP_OFFSET;
+
+        if (offsetY !== 0) {
+          if (clientY + height < winHgt || clientY - height < 0) {
+            setOffsetY(0);
+          } else if (offsetY !== -height) {
+            setOffsetY(-height);
+          }
+        } else {
+          if (clientY + height > winHgt && clientY - height >= 0) {
+            setOffsetY(-height);
+          }
+        }
+
+        if (offsetX !== 0) {
+          if (clientX + width < winWid || clientX - width < 0) {
+            setOffsetX(0);
+          } else if (offsetX !== -width) {
+            setOffsetX(-width);
+          }
+        } else {
+          if (clientX + width > winWid && clientX - width >= 0) {
+            setOffsetX(-width);
+          }
+        }
+
+        const shiftX = clientX + (offsetX === 0 ? TOOLTIP_OFFSET : -TOOLTIP_OFFSET);
+        const shiftY = clientY + (offsetY === 0 ? TOOLTIP_OFFSET : -TOOLTIP_OFFSET);
+
+        const reflectX = offsetX === 0 ? '' : 'translateX(-100%)';
+        const reflectY = offsetY === 0 ? '' : 'translateY(-100%)';
+
+        transform = `translateX(${shiftX}px) ${reflectX} translateY(${shiftY}px) ${reflectY}`;
+
+        // @todo fix mutating domRef styles
+        if (domRef.current != null) {
+          console.warn('[TooltipPlugin2::setCursor] transform', transform);
+          domRef.current.style.transform = transform;
+        } else {
+          console.warn('[TooltipPlugin2::setCursor] renderTooltip', { transform, style });
+          setStyle({ ...style, transform });
+          renderTooltip(u);
+        }
+      }
+    },
+    [isHovering, offsetX, offsetY, renderTooltip, style, winHgt, winWid]
+  );
+
+  const onClick = useCallback(
+    (u: uPlot, e: PointerEvent) => {
+      if (!u.cursor) {
+        throw new Error('[TooltipPlugin2::onClick] cursor not defined!');
+      }
+      if (u.cursor.left === undefined) {
+        throw new Error('[TooltipPlugin2::onClick] cursor left undefined!');
+      }
+
+      console.log('[TooltipPlugin2::onClick]', { e, over: u.over, ctrl: e.ctrlKey, meta: e.metaKey });
+      if (e.target === u.over) {
+        console.log('[TooltipPlugin2::onClick] - target is u.over');
+        const isWipAnnotationModifierActive = e.ctrlKey || e.metaKey;
+        if (isWipAnnotationModifierActive) {
+          let xVal;
+
+          const isXAxisHorizontal = u.scales.x.ori === 0;
+          if (isXAxisHorizontal) {
+            xVal = u.posToVal(u.cursor.left, 'x');
+          } else {
+            xVal = u.posToVal(u.select.top + u.select.height, 'x');
+          }
+
+          setAnnotationRange({
+            from: xVal,
+            to: xVal,
+          });
+
+          console.log('[TooltipPlugin2::onClick] - renderTooltip (anno)');
+          renderTooltip(u, false);
+        }
+        // if tooltip visible, not pinned, and within proximity to a series/point
+        else if (isHovering && !isPinned && closestSeriesIdx != null) {
+          const seriesIndex = seriesIdxs[closestSeriesIdx];
+          if (seriesIndex === null) {
+            throw new Error('[TooltipPlugin2::onClick] - seriesIndex not defined!');
+          }
+          setDataLinks(getLinksRef.current(closestSeriesIdx, seriesIndex));
+          setAdHocFilters(getAdHocFiltersRef.current(closestSeriesIdx, seriesIndex));
+
+          const oneClickLink = dataLinks.find((dataLink) => dataLink.oneClick === true);
+
+          if (oneClickLink != null) {
+            window.open(oneClickLink.href, oneClickLink.target ?? '_self');
+          } else {
+            setIsPinned(true);
+            console.log('[TooltipPlugin2::onClick] - renderTooltip (hover)');
+            renderTooltip(u, true);
+          }
+        }
+      }
+    },
+    [closestSeriesIdx, dataLinks, isHovering, isPinned, renderTooltip, seriesIdxs]
+  );
+
+  const onConfigChange = useCallback((u: uPlot) => {
     sizeRef.current?.observer.disconnect();
 
-    if (!plot) {
+    if (!u) {
       // @todo remove debug
       console.warn('[useLayoutEffect::config] Plot not initiated!');
       return;
@@ -740,7 +685,10 @@ export const TooltipPlugin2 = ({
       width: 0,
       height: 0,
       observer: new ResizeObserver((entries) => {
-        let size = sizeRef.current!;
+        const size = sizeRef.current;
+        if (!size) {
+          throw new Error('[useLayoutEffect::config] sizeRef undefined!');
+        }
 
         for (const entry of entries) {
           if (entry.borderBoxSize?.length > 0) {
@@ -763,7 +711,7 @@ export const TooltipPlugin2 = ({
             }
 
             if (clientZoom && yZoomed) {
-              for (let key in u.scales!) {
+              for (const key in u.scales) {
                 if (key !== 'x') {
                   // @ts-ignore (this is not typed correctly in uPlot, assigning nulls means auto-scale / reset)
                   u.setScale(key, { min: null, max: null });
@@ -772,8 +720,7 @@ export const TooltipPlugin2 = ({
 
               setYZoomed(false);
             } else if (queryZoom != null) {
-              let xScale = u.scales.x;
-
+              const xScale = u.scales.x;
               const frTs = xScale.min!;
               const toTs = xScale.max!;
               const pad = (toTs - frTs) / 2;
@@ -787,37 +734,130 @@ export const TooltipPlugin2 = ({
       });
     }
 
-    const onscroll = (e: Event) => {
-      updatePlotVisible(plot);
-      isHovering && e.target instanceof Node && e.target.contains(plot.root) && dismiss(plot);
+    const onscroll = (u: uPlot, e: Event) => {
+      isHovering && e.target instanceof Node && e.target.contains(u.root) && dismiss(u);
     };
 
-    window.addEventListener('resize', () => updateWinSize(plot));
-    window.addEventListener('scroll', onscroll, true);
+    window.addEventListener('resize', () => updateWinSize(u));
+    window.addEventListener('scroll', (e) => onscroll(u, e), true);
 
     return () => {
       sizeRef.current?.observer.disconnect();
 
       //@todo does this clean up?
-      window.removeEventListener('resize', () => updateWinSize(plot));
-      window.removeEventListener('scroll', onscroll, true);
+      window.removeEventListener('resize', () => updateWinSize(u));
+      window.removeEventListener('scroll', (e) => onscroll(u, e), true);
 
       // in case this component unmounts while anchored (due to data auto-refresh + re-config)
-      document.removeEventListener('mousedown', downEventOutside, true);
-      document.removeEventListener('keydown', downEventOutside, true);
+      document.removeEventListener('mousedown', (e) => downEventOutside(u, e), true);
+      document.removeEventListener('keydown', (e) => downEventOutside(u, e), true);
     };
-  }, [
-    clientZoom,
-    config,
-    dismiss,
-    downEventOutside,
-    isHovering,
-    plot,
-    queryZoom,
-    updatePlotVisible,
-    updateWinSize,
-    yZoomed,
-  ]);
+
+    // Only run on config change!
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const init = useCallback(
+    (u: uPlot) => {
+      // detect shiftKey and mutate drag mode from x-only to y-only
+      if (clientZoom) {
+        u.over.addEventListener(
+          'mousedown',
+          (e) => {
+            if (!maybeZoomAction(e)) {
+              return;
+            }
+
+            if (e.button === 0 && e.shiftKey) {
+              setYDrag(true);
+
+              if (!u.cursor.drag) {
+                throw new Error('[TooltipPlugin2::uPlot::mousedown] cursor drag not defined!');
+              }
+              u.cursor.drag.x = false;
+              u.cursor.drag.y = true;
+
+              const onUp = (_: MouseEvent) => {
+                if (!u.cursor.drag) {
+                  throw new Error('[TooltipPlugin2::uPlot::mousedown::onUp] cursor drag not defined!');
+                }
+                u.cursor.drag.x = true;
+                u.cursor.drag.y = false;
+                document.removeEventListener('mouseup', onUp, true);
+              };
+
+              document.addEventListener('mouseup', onUp, true);
+            }
+          },
+          true
+        );
+      }
+
+      // add zoom-in cursor during drag-to-zoom interaction
+      if (queryZoom != null || clientZoom) {
+        u.over.addEventListener(
+          'mousedown',
+          (e) => {
+            if (!maybeZoomAction(e)) {
+              return;
+            }
+
+            if (e.button === 0) {
+              u.over.classList.add('zoom-drag');
+
+              const onUp = () => {
+                u.over.classList.remove('zoom-drag');
+                document.removeEventListener('mouseup', onUp, true);
+              };
+
+              document.addEventListener('mouseup', onUp, true);
+            }
+          },
+          true
+        );
+      }
+
+      // this handles pinning, 0-width range selection, and one-click
+      // @todo clean up event listener on uplot destruct
+      u.over.addEventListener('click', (e) => onClick(u, e));
+
+      updateWinSize(u);
+
+      onConfigChange(u);
+    },
+    [clientZoom, onClick, onConfigChange, queryZoom, updateWinSize]
+  );
+
+  const plot = usePlotConfigHook(config, 'init', init);
+  console.log('plot', plot);
+
+  // @todo don't need to set this to state
+  // const updatePlotVisible = useCallback(
+  //   (plot: uPlot | null) => {
+  //     if (!plot) {
+  //       throw new Error('[updatePlotVisible] Plot not initiated!');
+  //     }
+  //     setPlotVisible(
+  //       plot.rect.bottom <= winHgt && plot.rect.top >= 0 && plot.rect.left >= 0 && plot.rect.right <= winWid
+  //     );
+  //     console.log(
+  //       'updatePlotVisible',
+  //       plot.rect.bottom <= winHgt && plot.rect.top >= 0 && plot.rect.left >= 0 && plot.rect.right <= winWid
+  //     );
+  //   },
+  //   [winHgt, winWid]
+  // );
+
+  // uPlot hooks
+  usePlotConfigHook(config, 'setLegend', setLegend);
+  usePlotConfigHook(config, 'setSelect', setSelect);
+  usePlotConfigHook(config, 'setData', setData);
+  usePlotConfigHook(config, 'setSeries', setSeries);
+  // usePlotConfigHook(config, 'ready', updatePlotVisible);
+  usePlotConfigHook(config, 'setCursor', setCursor);
+
+  // layout effects
+  // useLayoutEffect(, [config]);
 
   useLayoutEffect(() => {
     const size = sizeRef.current;
@@ -843,6 +883,7 @@ export const TooltipPlugin2 = ({
     size.width = width;
     size.height = height;
 
+    // @todo don't mutate this
     let event = plot?.cursor.event;
 
     // if not viaSync, re-dispatch real event
@@ -879,6 +920,30 @@ export const TooltipPlugin2 = ({
       );
     }
   }, [isHovering, plot]);
+
+  // set tooltip on annotation range state change
+  useEffect(() => {
+    if (!plot) {
+      return;
+    }
+
+    setTooltipContent(plot);
+  }, [annotationRange, plot, setTooltipContent]);
+  // set tooltip on hovering state change
+  useEffect(() => {
+    if (!plot) {
+      return;
+    }
+
+    console.log('useEffect::onHover', { isHovering, seriesIdxs, offsetY, offsetX });
+
+    if (isHovering) {
+      queueMicrotask(() => setTooltipContent(plot, true));
+    } else {
+      // @todo delay/debounce (100ms)
+      setTooltipContent(plot, false);
+    }
+  }, [isHovering, plot, seriesIdxs, offsetX, offsetY, yDrag, isPinned, winHgt, winWid, setTooltipContent]);
 
   const isRenderingTooltip = plot && isHovering;
   console.log('[TooltipPlugin2::RENDER]', { annotationRange, isPinned, isHovering, isRenderingTooltip });
