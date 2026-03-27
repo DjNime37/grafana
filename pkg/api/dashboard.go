@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/dynamic"
 
 	claims "github.com/grafana/authlib/types"
 	dashboardsV1 "github.com/grafana/grafana/apps/dashboard/pkg/apis/dashboard/v1"
@@ -31,6 +30,7 @@ import (
 	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/dashboards/dashboardaccess"
+	"github.com/grafana/grafana/pkg/services/dashboards/service"
 	dashver "github.com/grafana/grafana/pkg/services/dashboardversion"
 	"github.com/grafana/grafana/pkg/services/folder"
 	"github.com/grafana/grafana/pkg/services/org"
@@ -436,9 +436,12 @@ func (hs *HTTPServer) postDashboard(c *contextmodel.ReqContext, cmd dashboards.S
 			" OR it should include a object wrapper with an explicit 'apiVersion' and move the body into a 'spec' element", nil)
 	}
 
+	// The k8s object
+	obj := &unstructured.Unstructured{}
+
 	// Items with metadata, spec, etc
 	if dashboards.LooksLikeK8sResource(spec) {
-		obj := &unstructured.Unstructured{Object: spec}
+		obj.Object = spec
 		apiVersion := obj.GetAPIVersion()
 		switch {
 		case strings.HasPrefix(apiVersion, dashboardsV1.GROUP):
@@ -454,89 +457,27 @@ func (hs *HTTPServer) postDashboard(c *contextmodel.ReqContext, cmd dashboards.S
 				obj.SetName(uid) // overwrite the incoming name -- this might happen from TF providers
 			}
 			hs.log.Warn("DEPRECATION WARNING: Accepting k8s style dashboard in legacy /api/dashboards/db.  Please use the /apis/dashboard.grafana.app/ API to manage this resource", "dashboard", obj.GetName())
-			return hs.saveDashboardViaK8s(c, cmd, obj)
 
 		case apiVersion == "":
 			return response.Error(http.StatusBadRequest, "Dashboard appears to be a k8s style resource, but is missing an explicit apiVersion.", nil)
+
+		default:
+			return response.Error(http.StatusBadRequest, "The dashboard payload references a non dashboard apiVersion.  This should be sent to the requested api directly", nil)
 		}
-		return response.Error(http.StatusBadRequest, "The dashboard payload references a non dashboard apiVersion.  This should be sent to the requested api directly", nil)
-	}
-
-	_, found := spec["title"]
-	if !found {
-		return response.Error(http.StatusBadRequest, "Dashboard is missing required title property", nil)
-	}
-
-	ctx = c.Req.Context()
-
-	var userID int64
-	if id, err := identity.UserIdentifier(c.GetID()); err == nil {
-		userID = id
-	}
-
-	cmd.OrgID = c.GetOrgID()
-	cmd.UserID = userID
-
-	dash := cmd.GetDashboardModel()
-	newDashboard := dash.ID == 0
-	if newDashboard {
-		limitReached, err := hs.QuotaService.QuotaReached(c, dashboards.QuotaTargetSrv)
+	} else {
+		obj, err = service.LegacySaveCommandToUnstructured(&cmd, "")
 		if err != nil {
-			return response.Error(http.StatusInternalServerError, "Failed to get quota", err)
-		}
-		if limitReached {
-			return response.Error(http.StatusForbidden, "Quota reached", nil)
+			return response.Error(http.StatusBadRequest, "unable to convert dashbaord", err)
 		}
 	}
 
-	var provisioningData *dashboards.DashboardProvisioning
-	if dash.ID != 0 {
-		data, err := hs.dashboardProvisioningService.GetProvisionedDashboardDataByDashboardID(c.Req.Context(), dash.ID)
-		if err != nil {
-			return response.Error(http.StatusInternalServerError, "Error while checking if dashboard is provisioned using ID", err)
-		}
-		provisioningData = data
-	} else if dash.UID != "" {
-		data, err := hs.dashboardProvisioningService.GetProvisionedDashboardDataByDashboardUID(c.Req.Context(), dash.OrgID, dash.UID)
-		if err != nil && !errors.Is(err, dashboards.ErrProvisionedDashboardNotFound) && !errors.Is(err, dashboards.ErrDashboardNotFound) {
-			return response.Error(http.StatusInternalServerError, "Error while checking if dashboard is provisioned", err)
-		}
-		provisioningData = data
-	}
-
-	allowUiUpdate := true
-	if provisioningData != nil {
-		allowUiUpdate = hs.ProvisioningService.GetAllowUIUpdatesFromConfig(provisioningData.Name)
-	}
-
-	dashItem := &dashboards.SaveDashboardDTO{
-		Dashboard: dash,
-		Message:   cmd.Message,
-		OrgID:     c.GetOrgID(),
-		User:      c.SignedInUser,
-		Overwrite: cmd.Overwrite,
-	}
-
-	dashboard, saveErr := hs.DashboardService.SaveDashboard(ctx, dashItem, allowUiUpdate)
-	if saveErr != nil {
-		return apierrors.ToDashboardErrorResponse(ctx, hs.pluginStore, saveErr)
-	}
-
-	return response.JSON(http.StatusOK, util.DynMap{
-		"status":    "success",
-		"slug":      dashboard.Slug,
-		"version":   dashboard.Version,
-		"id":        dashboard.ID,
-		"uid":       dashboard.UID,
-		"url":       dashboard.GetURL(),
-		"folderUid": dashboard.FolderUID,
-	})
+	return hs.saveDashboardViaK8s(c, cmd, obj)
 }
 
 func (hs *HTTPServer) saveDashboardViaK8s(c *contextmodel.ReqContext, cmd dashboards.SaveDashboardCommand, obj *unstructured.Unstructured) response.Response {
 	gv, err := schema.ParseGroupVersion(obj.GetAPIVersion())
 	if err != nil {
-		return response.Error(http.StatusBadRequest, "Dashboard appears to be a full k8s style resource.  Please use the /apis/dashboard.grafana.app/ API to manage this resource", err)
+		return response.Error(http.StatusBadRequest, "Dashboard does not include a valid apiVersion.  Please use the /apis/dashboard.grafana.app/ API to manage this resource", err)
 	}
 
 	title, _, _ := unstructured.NestedString(obj.Object, "spec", "title")
@@ -546,11 +487,10 @@ func (hs *HTTPServer) saveDashboardViaK8s(c *contextmodel.ReqContext, cmd dashbo
 
 	ctx := c.Req.Context()
 	namespace := hs.namespacer(c.GetOrgID())
-	tmp, err := dynamic.NewForConfig(hs.clientConfigProvider.GetDirectRestConfig(c))
+	client, err := hs.resourceClientProvider(c, gv.WithResource(dashboardsV1.DASHBOARD_RESOURCE), namespace)
 	if err != nil {
 		return response.Error(http.StatusInternalServerError, "Failed to create k8s client", err)
 	}
-	client := tmp.Resource(gv.WithResource(dashboardsV1.DASHBOARD_RESOURCE)).Namespace(namespace)
 
 	obj.SetKind("Dashboard") // Writing to the dashboard API
 	obj.SetNamespace(namespace)

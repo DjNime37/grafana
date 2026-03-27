@@ -27,6 +27,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/youmark/pkcs8"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/grafana/grafana/pkg/api/avatar"
 	"github.com/grafana/grafana/pkg/api/datasource"
@@ -57,6 +59,7 @@ import (
 	"github.com/grafana/grafana/pkg/services/authn"
 	"github.com/grafana/grafana/pkg/services/cleanup"
 	"github.com/grafana/grafana/pkg/services/contexthandler"
+	contextmodel "github.com/grafana/grafana/pkg/services/contexthandler/model"
 	"github.com/grafana/grafana/pkg/services/correlations"
 	"github.com/grafana/grafana/pkg/services/dashboards"
 	"github.com/grafana/grafana/pkg/services/dashboardsnapshots"
@@ -217,6 +220,7 @@ type HTTPServer struct {
 	promRegister                    prometheus.Registerer
 	promGatherer                    prometheus.Gatherer
 	clientConfigProvider            grafanaapiserver.DirectRestConfigProvider
+	resourceClientProvider          func(c *contextmodel.ReqContext, gvr schema.GroupVersionResource, ns string) (dynamic.ResourceInterface, error)
 	namespacer                      request.NamespaceMapper
 	anonService                     anonymous.Service
 	userVerifier                    user.Verifier
@@ -374,10 +378,18 @@ func ProvideHTTPServer(opts ServerOptions, cfg *setting.Cfg, routeRegister routi
 		promRegister:                 promRegister,
 		promGatherer:                 promGatherer,
 		clientConfigProvider:         clientConfigProvider,
-		namespacer:                   request.GetNamespaceMapper(cfg),
-		anonService:                  anonService,
-		userVerifier:                 userVerifier,
-		publicDashboardsService:      publicDashboardsService,
+		// Helper function that makes mocking functions easier
+		resourceClientProvider: func(c *contextmodel.ReqContext, gvr schema.GroupVersionResource, ns string) (dynamic.ResourceInterface, error) {
+			tmp, err := dynamic.NewForConfig(clientConfigProvider.GetDirectRestConfig(c))
+			if err != nil {
+				return nil, err
+			}
+			return tmp.Resource(gvr).Namespace(ns), nil
+		},
+		namespacer:              request.GetNamespaceMapper(cfg),
+		anonService:             anonService,
+		userVerifier:            userVerifier,
+		publicDashboardsService: publicDashboardsService,
 		htmlHandlerRequestsDuration: metricutil.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: "grafana",
 			Name:      "html_handler_requests_duration_seconds",

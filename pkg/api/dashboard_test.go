@@ -14,6 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 
 	"github.com/grafana/grafana/pkg/api/dtos"
 	"github.com/grafana/grafana/pkg/api/response"
@@ -399,7 +405,7 @@ func TestIntegrationDashboardAPIEndpoint(t *testing.T) {
 				Message:   "msg",
 			}
 
-			dashboardService := dashboards.NewFakeDashboardService(t)
+			dashboardService := &MockDynamicResourceInterface{}
 			dashboardService.On("SaveDashboard", mock.Anything, mock.AnythingOfType("*dashboards.SaveDashboardDTO"), mock.AnythingOfType("bool")).
 				Return(&dashboards.Dashboard{ID: dashID, UID: "uid", Title: "Dash", Slug: "dash", Version: 2, FolderUID: folderUID}, nil)
 			mockFolderService := &foldertest.FakeService{
@@ -434,7 +440,7 @@ func TestIntegrationDashboardAPIEndpoint(t *testing.T) {
 				Message:   "msg",
 			}
 
-			dashboardService := dashboards.NewFakeDashboardService(t)
+			dashboardService := &MockDynamicResourceInterface{}
 			dashboardService.On("SaveDashboard", mock.Anything, mock.AnythingOfType("*dashboards.SaveDashboardDTO"), mock.AnythingOfType("bool")).
 				Return(&dashboards.Dashboard{ID: dashID, UID: "uid", Title: "Dash", Slug: "dash", Version: 2}, nil)
 
@@ -483,7 +489,7 @@ func TestIntegrationDashboardAPIEndpoint(t *testing.T) {
 			}
 
 			for _, tc := range testCases {
-				dashboardService := dashboards.NewFakeDashboardService(t)
+				dashboardService := &MockDynamicResourceInterface{}
 				dashboardService.On("SaveDashboard", mock.Anything, mock.AnythingOfType("*dashboards.SaveDashboardDTO"), mock.AnythingOfType("bool")).Return(nil, tc.SaveError)
 
 				postDashboardScenario(t, fmt.Sprintf("Expect '%s' error when calling POST on", tc.SaveError.Error()),
@@ -1108,7 +1114,7 @@ func callPostDashboardShouldReturnSuccess(sc *scenarioContext) {
 	assert.Equal(sc.t, 200, sc.resp.Code)
 }
 
-func postDashboardScenario(t *testing.T, desc string, url string, routePattern string, cmd dashboards.SaveDashboardCommand, dashboardService dashboards.DashboardService, folderService folder.Service, fn scenarioFunc) {
+func postDashboardScenario(t *testing.T, desc string, url string, routePattern string, cmd dashboards.SaveDashboardCommand, dashboardService dynamic.ResourceInterface, folderService folder.Service, fn scenarioFunc) {
 	t.Run(fmt.Sprintf("%s %s", desc, url), func(t *testing.T) {
 		cfg := setting.NewCfg()
 		hs := HTTPServer{
@@ -1118,12 +1124,18 @@ func postDashboardScenario(t *testing.T, desc string, url string, routePattern s
 			QuotaService:          quotatest.New(false, nil),
 			pluginStore:           &pluginstore.FakePluginStore{},
 			LibraryElementService: &libraryelementsfake.LibraryElementService{},
-			DashboardService:      dashboardService,
-			folderService:         folderService,
-			Features:              featuremgmt.WithFeatures(),
-			accesscontrolService:  actest.FakeService{},
-			log:                   log.New("test-logger"),
-			tracer:                tracing.InitializeTracerForTest(),
+			resourceClientProvider: func(c *contextmodel.ReqContext, gvr schema.GroupVersionResource, ns string) (dynamic.ResourceInterface, error) {
+				switch gvr.Group {
+				case "dasboard.grafana.app":
+					return dashboardService, nil
+				}
+				return nil, fmt.Errorf("unsupported group")
+			},
+			folderService:        folderService,
+			Features:             featuremgmt.WithFeatures(),
+			accesscontrolService: actest.FakeService{},
+			log:                  log.New("test-logger"),
+			tracer:               tracing.InitializeTracerForTest(),
 		}
 
 		sc := setupScenarioContext(t, url)
@@ -1205,3 +1217,93 @@ func (s mockDashboardProvisioningService) GetProvisionedDashboardDataByDashboard
 ) {
 	return nil, nil
 }
+
+// MockDynamicResourceInterface is a mock for dynamic.ResourceInterface
+type MockDynamicResourceInterface struct {
+	mock.Mock
+}
+
+func (m *MockDynamicResourceInterface) Create(ctx context.Context, obj *unstructured.Unstructured, options metav1.CreateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, obj, options, subresources)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) Update(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, obj, options, subresources)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) UpdateStatus(ctx context.Context, obj *unstructured.Unstructured, options metav1.UpdateOptions) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, obj, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) Delete(ctx context.Context, name string, options metav1.DeleteOptions, subresources ...string) error {
+	args := m.Called(ctx, name, options, subresources)
+	return args.Error(0)
+}
+
+func (m *MockDynamicResourceInterface) DeleteCollection(ctx context.Context, options metav1.DeleteOptions, listOptions metav1.ListOptions) error {
+	args := m.Called(ctx, options, listOptions)
+	return args.Error(0)
+}
+
+func (m *MockDynamicResourceInterface) Get(ctx context.Context, name string, options metav1.GetOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, name, options, subresources)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) List(ctx context.Context, opts metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	args := m.Called(ctx, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.UnstructuredList), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) Watch(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+	args := m.Called(ctx, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(watch.Interface), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, options metav1.PatchOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, name, pt, data, options, subresources)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) Apply(ctx context.Context, name string, obj *unstructured.Unstructured, options metav1.ApplyOptions, subresources ...string) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, name, obj, options, subresources)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+func (m *MockDynamicResourceInterface) ApplyStatus(ctx context.Context, name string, obj *unstructured.Unstructured, options metav1.ApplyOptions) (*unstructured.Unstructured, error) {
+	args := m.Called(ctx, name, obj, options)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*unstructured.Unstructured), args.Error(1)
+}
+
+// Ensure MockDynamicResourceInterface implements dynamic.ResourceInterface
+var _ dynamic.ResourceInterface = (*MockDynamicResourceInterface)(nil)
