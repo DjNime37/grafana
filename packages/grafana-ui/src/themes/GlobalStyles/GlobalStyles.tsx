@@ -4,6 +4,7 @@ import { useTheme2 } from '../ThemeContext';
 
 import { getAccessibilityStyles } from './accessibility';
 import { getAlertingStyles } from './alerting';
+import { getAnimatedBorderPropertyStyles } from './animatedBorder';
 import { getCardStyles } from './card';
 import { getCodeStyles } from './code';
 import { getDashboardGridStyles } from './dashboardGrid';
@@ -33,6 +34,7 @@ export function GlobalStyles() {
       styles={[
         getAccessibilityStyles(theme),
         getAlertingStyles(theme),
+        getAnimatedBorderPropertyStyles(),
         getCodeStyles(theme),
         getDashDiffStyles(theme),
         getDashboardGridStyles(theme),

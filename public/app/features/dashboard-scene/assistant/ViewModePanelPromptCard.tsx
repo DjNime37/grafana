@@ -7,10 +7,9 @@ import { AssistantPromptCard, createAssistantContextItem } from '@grafana/assist
 import { GrafanaTheme2 } from '@grafana/data';
 import { t } from '@grafana/i18n';
 import { reportInteraction } from '@grafana/runtime';
-import { useStyles2, useTheme2 } from '@grafana/ui';
+import { getAnimatedBorderStyles, useStyles2 } from '@grafana/ui';
 
 import { type PopoverTarget } from './AssistantPopoverContext';
-import { getAnimatedBorderClass } from './DashboardAssistantViewMode';
 
 interface ViewModePanelPromptCardProps {
   targets: PopoverTarget[];
@@ -24,7 +23,7 @@ interface ViewModePanelPromptCardProps {
  */
 export function ViewModePanelPromptCard({ targets, onClose }: ViewModePanelPromptCardProps) {
   const styles = useStyles2(getStyles);
-  const theme = useTheme2();
+  const animatedBorder = useStyles2(getAnimatedBorderStyles, { variant: 'ai' });
 
   // Anchor to the last selected panel
   const lastTarget = targets[targets.length - 1];
@@ -47,17 +46,16 @@ export function ViewModePanelPromptCard({ targets, onClose }: ViewModePanelPromp
   );
 
   // Apply animated border to ALL selected panels
-  const borderClass = useMemo(() => getAnimatedBorderClass(theme), [theme]);
   useEffect(() => {
     for (const el of allAnchorEls) {
-      el.classList.add(borderClass);
+      el.classList.add(animatedBorder);
     }
     return () => {
       for (const el of allAnchorEls) {
-        el.classList.remove(borderClass);
+        el.classList.remove(animatedBorder);
       }
     };
-  }, [allAnchorEls, borderClass]);
+  }, [allAnchorEls, animatedBorder]);
 
   // Close the popover when any anchor element is removed from the DOM
   // (e.g. when a row is collapsed).

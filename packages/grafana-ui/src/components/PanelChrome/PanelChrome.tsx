@@ -10,11 +10,11 @@ import { t } from '@grafana/i18n';
 import { useStyles2, useTheme2 } from '../../themes/ThemeContext';
 import { getFocusStyles } from '../../themes/mixins';
 import { DelayRender } from '../../utils/DelayRender';
+import { getAnimatedBorderStyles } from '../../utils/animatedBorder';
 import { getFeatureToggle } from '../../utils/featureToggle';
 import { usePointerDistance } from '../../utils/usePointerDistance';
 import { useElementSelection } from '../ElementSelectionContext/ElementSelectionContext';
 import { Icon } from '../Icon/Icon';
-import { LoadingBar } from '../LoadingBar/LoadingBar';
 import { Text } from '../Text/Text';
 import { Tooltip } from '../Tooltip/Tooltip';
 
@@ -161,6 +161,7 @@ export function PanelChrome({
 }: PanelChromeProps) {
   const theme = useTheme2();
   const styles = useStyles2(getStyles);
+  const animatedBorder = useStyles2(getAnimatedBorderStyles, { variant: 'loading' });
   const panelContentId = useId();
   const panelTitleId = useId().replace(/:/g, '_');
   const { isSelected, onSelect, isSelectable } = useElementSelection(selectionId);
@@ -203,7 +204,6 @@ export function PanelChrome({
   };
 
   const containerStyles: CSSProperties = { width, height: collapsed ? undefined : height };
-  const [ref, { width: loadingBarWidth }] = useMeasure<HTMLDivElement>();
 
   /** Old property name now maps to actions */
   if (leftItems) {
@@ -357,7 +357,8 @@ export function PanelChrome({
           styles.panel,
           isPanelTransparent && styles.panelTransparent,
           isSelected && 'dashboard-selected-element',
-          !isSelected && isSelectable && selectableHighlight && 'dashboard-selectable-element'
+          !isSelected && isSelectable && selectableHighlight && 'dashboard-selectable-element',
+          { [animatedBorder]: loadingState === LoadingState.Loading }
         )}
         style={containerStyles}
         aria-labelledby={!!title ? panelTitleId : undefined}
@@ -366,17 +367,7 @@ export function PanelChrome({
         onFocus={onFocus}
         onMouseMove={onMouseMove}
         onMouseEnter={onMouseEnter}
-        ref={ref}
       >
-        <div className={styles.loadingBarContainer}>
-          {loadingState === LoadingState.Loading ? (
-            <LoadingBar
-              width={loadingBarWidth}
-              ariaLabel={t('grafana-ui.panel-chrome.ariaLabel-panel-loading', 'Panel loading bar')}
-            />
-          ) : null}
-        </div>
-
         {hoverHeader && (
           <>
             {hasHeaderContent && (
