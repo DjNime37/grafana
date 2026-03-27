@@ -1,16 +1,24 @@
 import { css, cx } from '@emotion/css';
 import { useState } from 'react';
+import Skeleton from 'react-loading-skeleton';
 import { useToggle } from 'react-use';
 
 import { GrafanaTheme2 } from '@grafana/data';
 import { Trans, t } from '@grafana/i18n';
 import { useQueryRunner, useSceneContext } from '@grafana/scenes-react';
-import { FilterInput, Icon, ScrollContainer, Stack, Text, Tooltip, useStyles2 } from '@grafana/ui';
+import { Button, FilterInput, Icon, LoadingBar, ScrollContainer, Stack, Text, Tooltip, useStyles2 } from '@grafana/ui';
 
 import { countInstances } from '../SummaryStats';
 import { summaryInstanceCountQuery } from '../queries';
 import { useLabelsBreakdown } from '../useLabelsBreakdown';
-import { addOrReplaceFilter, removeFilter, useFilterValue, useQueryFilter } from '../utils';
+import {
+  addOrReplaceFilter,
+  cleanAlertStateFilter,
+  removeFilter,
+  useClearAllFilters,
+  useFilterValue,
+  useQueryFilter,
+} from '../utils';
 
 import { AllLabelsContent } from './LabelsContent';
 import { SeverityFilter } from './SeverityFilter';
@@ -22,35 +30,70 @@ const COLLAPSED_WIDTH = 36;
  * Always-visible labels column rendered to the left of the main workbench content.
  * Contains a state filter (firing / pending) and the full label breakdown.
  */
+const SKELETON_ROW_COUNT = 6;
+
+function LabelsSkeleton() {
+  const styles = useStyles2(getStyles);
+  return (
+    <div className={styles.skeletonList}>
+      {Array.from({ length: SKELETON_ROW_COUNT }, (_, i) => (
+        <div key={i} className={styles.skeletonRow}>
+          {/* chevron */}
+          <Skeleton width={16} height={16} />
+          {/* key name — flex:1 so it fills remaining space */}
+          <span className={styles.skeletonName}>
+            <Skeleton width="100%" height={16} />
+          </span>
+          {/* firing/pending badges */}
+          <div className={styles.skeletonBadges}>
+            <Skeleton width={22} height={16} />
+            <Skeleton width={22} height={16} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function LabelsColumn() {
   const { labels, isLoading } = useLabelsBreakdown();
+  const isFirstLoad = isLoading && labels.length === 0;
+  const isSubsequentLoad = isLoading && labels.length > 0;
   const [open, toggleOpen] = useToggle(true);
   const [labelFilter, setLabelFilter] = useState('');
   const styles = useStyles2(getStyles);
+  const { hasActiveFilters, clearAllFilters } = useClearAllFilters();
 
   return (
     <div className={cx(styles.column, !open && styles.columnCollapsed)}>
       <div className={styles.collapseButtonRow}>
-        <Tooltip
-          content={
-            open
-              ? t('alerting.triage.collapse-sidebar', 'Collapse sidebar')
-              : t('alerting.triage.expand-sidebar', 'Expand sidebar')
-          }
-          placement="right"
-        >
-          <button
-            className={styles.collapseButton}
-            onClick={toggleOpen}
-            aria-label={
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Tooltip
+            content={
               open
                 ? t('alerting.triage.collapse-sidebar', 'Collapse sidebar')
                 : t('alerting.triage.expand-sidebar', 'Expand sidebar')
             }
+            placement="right"
           >
-            <Icon name={open ? 'angle-left' : 'angle-right'} size="sm" />
-          </button>
-        </Tooltip>
+            <button
+              className={styles.collapseButton}
+              onClick={toggleOpen}
+              aria-label={
+                open
+                  ? t('alerting.triage.collapse-sidebar', 'Collapse sidebar')
+                  : t('alerting.triage.expand-sidebar', 'Expand sidebar')
+              }
+            >
+              <Icon name={open ? 'angle-left' : 'angle-right'} size="sm" />
+            </button>
+          </Tooltip>
+          {open && (
+            <Button size="sm" variant="primary" fill="text" onClick={clearAllFilters} disabled={!hasActiveFilters}>
+              <Trans i18nKey="alerting.triage.clear-filters">Clear filters</Trans>
+            </Button>
+          )}
+        </Stack>
       </div>
       {open && (
         <ScrollContainer scrollbarWidth="thin">
@@ -81,7 +124,9 @@ export function LabelsColumn() {
                 className={styles.labelFilterInput}
               />
             </div>
-            {!isLoading && labels.length > 0 && <AllLabelsContent allLabels={labels} labelFilter={labelFilter} />}
+            <div className={styles.loadingBar}>{isSubsequentLoad && <LoadingBar width={LABELS_COLUMN_WIDTH} />}</div>
+            {isFirstLoad && <LabelsSkeleton />}
+            {!isFirstLoad && labels.length > 0 && <AllLabelsContent allLabels={labels} labelFilter={labelFilter} />}
           </div>
         </ScrollContainer>
       )}
@@ -137,10 +182,7 @@ export function useInstanceCounts(): { firing: number; pending: number } | undef
   const filter = useQueryFilter();
 
   // Strip alertstate from filter since the instance count query adds its own alertstate matchers
-  const cleanFilter = filter
-    .replace(/alertstate\s*=~?\s*"(firing|pending)"[,\s]*/, '')
-    .replace(/,\s*$/, '')
-    .replace(/^\s*,/, '');
+  const cleanFilter = cleanAlertStateFilter(filter);
 
   const instanceDataProvider = useQueryRunner({
     queries: [summaryInstanceCountQuery(cleanFilter)],
@@ -174,8 +216,6 @@ const getStyles = (theme: GrafanaTheme2) => ({
     borderRight: 'none',
   }),
   collapseButtonRow: css({
-    display: 'flex',
-    justifyContent: 'flex-end',
     padding: theme.spacing(0.5),
     flexShrink: 0,
   }),
@@ -223,6 +263,32 @@ const getStyles = (theme: GrafanaTheme2) => ({
   }),
   labelFilterInput: css({
     width: '100%',
+  }),
+  loadingBar: css({
+    // Fixed height prevents layout shift when the bar appears/disappears
+    height: 1,
+    overflow: 'hidden',
+  }),
+  skeletonList: css({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: theme.spacing(1),
+    padding: theme.spacing(1, 1.5),
+  }),
+  skeletonRow: css({
+    display: 'flex',
+    alignItems: 'center',
+    gap: theme.spacing(0.75),
+  }),
+  skeletonName: css({
+    flex: 1,
+    minWidth: 0,
+  }),
+  skeletonBadges: css({
+    display: 'flex',
+    gap: theme.spacing(0.5),
+    marginLeft: 'auto',
+    flexShrink: 0,
   }),
   stateButton: css({
     display: 'flex',

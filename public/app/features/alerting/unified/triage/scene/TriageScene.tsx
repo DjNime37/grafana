@@ -4,7 +4,7 @@ import {
   GroupByVariable,
   SceneControlsSpacer,
   SceneFlexLayout,
-  SceneRefreshPicker,
+  SceneReactObject,
   SceneTimePicker,
   SceneTimeRange,
   SceneVariableSet,
@@ -30,23 +30,13 @@ export const triageScene = new EmbeddedSceneWithContext({
     new VariableValueSelectors({}),
     new TriageSavedSearchesControl({}),
     new SceneControlsSpacer(),
+    // Fixed 160px left margin (theme.spacing(20) = 8px × 20) before the time picker
+    new SceneReactObject({ component: () => <div style={{ width: '160px' }} /> }),
     new SceneTimePicker({}),
-    new SceneRefreshPicker({}),
   ],
   $timeRange: new SceneTimeRange(defaultTimeRange),
   $variables: new SceneVariableSet({
     variables: [
-      new GroupByVariable({
-        name: 'groupBy',
-        label: 'Group by',
-        datasource: {
-          type: 'prometheus',
-          uid: DATASOURCE_UID,
-        },
-        allowCustomValue: true,
-        applyMode: 'manual',
-        getTagKeysProvider: getGroupByTagKeysProvider,
-      }),
       new AdHocFiltersVariable({
         name: 'filters',
         label: 'Filters',
@@ -64,6 +54,17 @@ export const triageScene = new EmbeddedSceneWithContext({
         expressionBuilder: prometheusExpressionBuilder,
         getTagKeysProvider: getAdHocTagKeysProvider,
         getTagValuesProvider: getAdHocTagValuesProvider,
+      }),
+      new GroupByVariable({
+        name: 'groupBy',
+        label: 'Group by',
+        datasource: {
+          type: 'prometheus',
+          uid: DATASOURCE_UID,
+        },
+        allowCustomValue: true,
+        applyMode: 'manual',
+        getTagKeysProvider: getGroupByTagKeysProvider,
       }),
     ],
   }),

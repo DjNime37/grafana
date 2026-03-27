@@ -49,6 +49,25 @@ export function useQueryFilter(): string {
   return filters;
 }
 
+/**
+ * Strips `alertstate` matchers from a Prometheus filter string.
+ *
+ * Queries that already group or filter by `alertstate` internally (e.g. `count by (alertstate)`)
+ * must not also receive an `alertstate` matcher from the user-facing AdHoc filter, as the
+ * conflicting matcher causes Prometheus to return duplicated series in the result.
+ *
+ * Handles:
+ *   - `alertstate="firing"` (exact match)
+ *   - `alertstate=~"firing|pending"` (regex match)
+ *   - trailing/leading commas left after removal
+ */
+export function cleanAlertStateFilter(filter: string): string {
+  return filter
+    .replace(/alertstate\s*=~?\s*"[^"]*"[,\s]*/g, '')
+    .replace(/,\s*$/, '')
+    .replace(/^\s*,/, '');
+}
+
 type AdHocFilterOperator = '=' | '!=' | '=~' | '!~' | '=|' | '!=|';
 
 /**
@@ -88,6 +107,25 @@ export function removeFilter(sceneContext: SceneObject, key: string) {
     const updatedFilters = filtersVariable.state.filters.filter((f) => f.key !== key);
     filtersVariable.setState({ filters: updatedFilters });
   }
+}
+
+export function clearAllFilters(sceneContext: SceneObject) {
+  const filtersVariable = sceneGraph.lookupVariable(VARIABLES.filters, sceneContext);
+  if (filtersVariable instanceof AdHocFiltersVariable) {
+    filtersVariable.setState({ filters: [] });
+  }
+}
+
+/**
+ * Returns whether any filters are currently active, and a function to clear them all.
+ */
+export function useClearAllFilters(): { hasActiveFilters: boolean; clearAllFilters: () => void } {
+  const sceneContext = useSceneContext();
+  const filters = useAdHocFilters();
+  return {
+    hasActiveFilters: filters.length > 0,
+    clearAllFilters: () => clearAllFilters(sceneContext),
+  };
 }
 
 /**

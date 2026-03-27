@@ -6,7 +6,7 @@ import { LegendDisplayMode, StackingMode, TooltipDisplayMode } from '@grafana/ui
 import { overrideToFixedColor } from '../../home/Insights';
 
 import { summaryChartQuery } from './queries';
-import { useQueryFilter } from './utils';
+import { cleanAlertStateFilter, useQueryFilter } from './utils';
 
 /**
  * Viz config for the summary chart - used by the React component
@@ -36,9 +36,12 @@ export const summaryChartVizConfig = VizConfigBuilders.timeseries()
 
 export function SummaryChartReact() {
   const filter = useQueryFilter();
+  // Strip alertstate from the filter: the chart query groups by alertstate internally,
+  // so an alertstate matcher in the selector causes duplicated series in the result.
+  const cleanFilter = cleanAlertStateFilter(filter);
 
   const dataProvider = useQueryRunner({
-    queries: [summaryChartQuery(filter)],
+    queries: [summaryChartQuery(cleanFilter)],
   });
 
   return <VizPanel title="" viz={summaryChartVizConfig} dataProvider={dataProvider} hoverHeader={true} />;
