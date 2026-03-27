@@ -5,6 +5,7 @@ import { UPlotConfigBuilder } from '@grafana/ui';
 
 type DropFirst<T extends unknown[]> = T extends [never, ...infer U] ? U : never;
 
+// @todo move
 export function usePlotConfigHook<T extends keyof Hooks.Defs>(
   config: UPlotConfigBuilder,
   hookType: T,
@@ -19,6 +20,7 @@ export function usePlotConfigHook<T extends keyof Hooks.Defs>(
     config.addHook<T>(hookType, ((u: uPlot, ...args: DropFirst<Parameters<NonNullable<Hooks.Defs[T]>>>) => {
       uplotRef.current = u;
       if (hookFn) {
+        // hookFn(u, ...args);
         Reflect.apply(hookFn, undefined, [u, ...args]);
       }
     }) as Hooks.Defs[T]);
