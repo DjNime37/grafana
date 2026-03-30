@@ -19,6 +19,7 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		{"GetLatestResourceKey_NotFound", testDataStoreGetLatestResourceKeyNotFound},
 		{"GetResourceKeyAtRevision", testDataStoreGetResourceKeyAtRevision},
 		{"BatchGet", testDataStoreBatchGet},
+		{"GetResourceStats_Comprehensive", testDataStoreGetResourceStatsComprehensive},
 	}
 
 	for _, tt := range implemented {
@@ -40,7 +41,6 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		{"ListResourceKeysAtRevision", testDataStoreListResourceKeysAtRevision},
 		{"ListResourceKeysAtRevision_EmptyResults", testDataStoreListResourceKeysAtRevisionEmptyResults},
 		{"ListResourceKeysAtRevision_ResourcesNewerThanRevision", testDataStoreListResourceKeysAtRevisionResourcesNewerThanRevision},
-		{"GetResourceStats_Comprehensive", testDataStoreGetResourceStatsComprehensive},
 	}
 
 	for _, tt := range notImplemented {

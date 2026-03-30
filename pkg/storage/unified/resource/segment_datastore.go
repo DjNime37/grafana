@@ -830,7 +830,80 @@ func (s *segmentDataStore) findDocAcrossSegments(readers []*segment.SegmentReade
 }
 
 func (s *segmentDataStore) GetResourceStats(ctx context.Context, nsr NamespacedResource, minCount int) ([]ResourceStats, error) {
-	return nil, fmt.Errorf("not implemented: GetResourceStats")
+	groupResources, err := s.GetGroupResources(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get group resources: %w", err)
+	}
+
+	var stats []ResourceStats
+	for _, gr := range groupResources {
+		if nsr.Group != "" && gr.Group != nsr.Group {
+			continue
+		}
+		if nsr.Resource != "" && gr.Resource != nsr.Resource {
+			continue
+		}
+
+		listKey := ListRequestKey{
+			Group:     gr.Group,
+			Resource:  gr.Resource,
+			Namespace: nsr.Namespace,
+		}
+
+		namespaceCounts := make(map[string]int64)
+		namespaceVersions := make(map[string]int64)
+
+		var currentResourceKey string
+		var lastDataKey *DataKey
+
+		processLastResource := func() {
+			if lastDataKey != nil {
+				if _, exists := namespaceVersions[lastDataKey.Namespace]; !exists {
+					namespaceVersions[lastDataKey.Namespace] = 0
+				}
+				if lastDataKey.Action != DataActionDeleted {
+					namespaceCounts[lastDataKey.Namespace]++
+				}
+				if lastDataKey.ResourceVersion > namespaceVersions[lastDataKey.Namespace] {
+					namespaceVersions[lastDataKey.Namespace] = lastDataKey.ResourceVersion
+				}
+			}
+		}
+
+		for dataKey, err := range s.Keys(ctx, listKey, SortOrderAsc) {
+			if err != nil {
+				return nil, err
+			}
+			resourceKey := fmt.Sprintf("%s/%s/%s/%s", dataKey.Namespace, dataKey.Group, dataKey.Resource, dataKey.Name)
+			if currentResourceKey != "" && resourceKey != currentResourceKey {
+				processLastResource()
+			}
+			currentResourceKey = resourceKey
+			lastDataKey = &dataKey
+		}
+		processLastResource()
+
+		for ns, count := range namespaceCounts {
+			if count <= int64(minCount) {
+				continue
+			}
+			stats = append(stats, ResourceStats{
+				NamespacedResource: NamespacedResource{
+					Namespace: ns,
+					Group:     gr.Group,
+					Resource:  gr.Resource,
+				},
+				Count:           count,
+				ResourceVersion: namespaceVersions[ns],
+			})
+		}
+
+		// Reset for next group/resource.
+		currentResourceKey = ""
+		lastDataKey = nil
+	}
+
+	return stats, nil
 }
 
 func (s *segmentDataStore) BatchDelete(ctx context.Context, keys []DataKey) error {
@@ -843,7 +916,49 @@ func (s *segmentDataStore) BatchDelete(ctx context.Context, keys []DataKey) erro
 }
 
 func (s *segmentDataStore) GetGroupResources(ctx context.Context) ([]GroupResource, error) {
-	return nil, fmt.Errorf("not implemented: GetGroupResources")
+	// Scan manifest keys (format: {group}/{resource}/{rv}) and extract unique group/resource pairs.
+	seen := make(map[string]bool)
+	var results []GroupResource
+
+	startKey := ""
+	for {
+		var foundKey string
+		for key, err := range s.kv.Keys(ctx, manifestSection, ListOptions{
+			StartKey: startKey,
+			Limit:    1,
+			Sort:     SortOrderAsc,
+		}) {
+			if err != nil {
+				return nil, err
+			}
+			foundKey = key
+			break
+		}
+		if foundKey == "" {
+			break
+		}
+
+		// Parse {group}/{resource}/{rv}
+		parts := strings.SplitN(foundKey, "/", 3)
+		if len(parts) < 3 {
+			// Skip malformed keys.
+			startKey = foundKey + "\x00"
+			continue
+		}
+		group, resource := parts[0], parts[1]
+		grKey := group + "/" + resource
+		if !seen[grKey] {
+			seen[grKey] = true
+			results = append(results, GroupResource{Group: group, Resource: resource})
+		}
+
+		// Jump past this entire group/resource prefix.
+		startKey = PrefixRangeEnd(grKey + "/")
+		if startKey == "" {
+			break
+		}
+	}
+	return results, nil
 }
 
 func (s *segmentDataStore) ApplyBackwardsCompatibleChanges(_ context.Context, _ db.Tx, _ WriteEvent, _ DataKey) error {
