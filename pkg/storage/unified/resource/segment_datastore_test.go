@@ -31,26 +31,14 @@ func TestIntegrationSegmentDataStore(t *testing.T) {
 		{"ListResourceKeysAtRevision", testSegmentDataStoreListResourceKeysAtRevision},
 		{"ListResourceKeysAtRevision_EmptyResults", testDataStoreListResourceKeysAtRevisionEmptyResults},
 		{"ListResourceKeysAtRevision_ResourcesNewerThanRevision", testDataStoreListResourceKeysAtRevisionResourcesNewerThanRevision},
+		{"List", testDataStoreList},
+		{"LastResourceVersion", testDataStoreLastResourceVersion},
 	}
 
 	for _, tt := range implemented {
 		t.Run(tt.name, func(t *testing.T) {
 			ds := setupTestSegmentDataStore(t)
 			tt.fn(t, t.Context(), ds)
-		})
-	}
-
-	notImplemented := []struct {
-		name string
-		fn   func(*testing.T, context.Context, DataStore)
-	}{
-		{"List", testDataStoreList},
-		{"LastResourceVersion", testDataStoreLastResourceVersion},
-	}
-
-	for _, tt := range notImplemented {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Skip("not yet implemented")
 		})
 	}
 }

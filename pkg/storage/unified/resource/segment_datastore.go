@@ -657,7 +657,21 @@ func (s *segmentDataStore) keysMergeSorted(
 }
 
 func (s *segmentDataStore) LastResourceVersion(ctx context.Context, key ListRequestKey) (DataKey, error) {
-	return DataKey{}, fmt.Errorf("not implemented: LastResourceVersion")
+	if err := key.Validate(); err != nil {
+		return DataKey{}, fmt.Errorf("invalid data key: %w", err)
+	}
+	if key.Group == "" || key.Resource == "" || key.Name == "" {
+		return DataKey{}, fmt.Errorf("group, resource or name is empty")
+	}
+
+	// Iterate all versions descending, take the first one (highest RV, includes deleted).
+	for dk, err := range s.Keys(ctx, key, SortOrderDesc) {
+		if err != nil {
+			return DataKey{}, err
+		}
+		return dk, nil
+	}
+	return DataKey{}, ErrNotFound
 }
 
 func (s *segmentDataStore) GetLatestAndPredecessor(ctx context.Context, key ListRequestKey) (DataKey, DataKey, error) {
