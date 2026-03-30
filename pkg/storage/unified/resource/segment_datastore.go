@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	segmentsSection = "unified/segments"
-	manifestSection = "unified/manifest"
+	segmentsSection = kvpkg.SegmentsSection
+	manifestSection = kvpkg.ManifestSection
 )
 
 var _ DataStore = &segmentDataStore{}
@@ -163,33 +163,30 @@ func (s *segmentDataStore) Save(ctx context.Context, key DataKey, value io.Reade
 		return fmt.Errorf("failed to build segment: %w", err)
 	}
 
-	// Write .zap to KV.
-	zapWriter, err := s.kv.Save(ctx, segmentsSection, segmentKVKey(key))
-	if err != nil {
+	// Write .zap to KV (base64-encoded — the SQL KV's value column is longtext, not blob).
+	if err := s.writeKV(ctx, segmentsSection, segmentKVKey(key), seg.Data); err != nil {
 		return fmt.Errorf("failed to save segment: %w", err)
-	}
-	if _, err := zapWriter.Write(seg.Data); err != nil {
-		_ = zapWriter.Close()
-		return fmt.Errorf("failed to write segment data: %w", err)
-	}
-	if err := zapWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close segment writer: %w", err)
 	}
 
 	// Write manifest entry. The key carries all the metadata; value is a placeholder.
-	manifestWriter, err := s.kv.Save(ctx, manifestSection, manifestKVKey(key))
-	if err != nil {
+	if err := s.writeKV(ctx, manifestSection, manifestKVKey(key), []byte{1}); err != nil {
 		return fmt.Errorf("failed to save manifest entry: %w", err)
-	}
-	if _, err := manifestWriter.Write([]byte{1}); err != nil {
-		_ = manifestWriter.Close()
-		return fmt.Errorf("failed to write manifest entry: %w", err)
-	}
-	if err := manifestWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close manifest writer: %w", err)
 	}
 
 	return nil
+}
+
+// writeKV writes data to the KV store.
+func (s *segmentDataStore) writeKV(ctx context.Context, section, key string, data []byte) error {
+	w, err := s.kv.Save(ctx, section, key)
+	if err != nil {
+		return err
+	}
+	if _, err := w.Write(data); err != nil {
+		_ = w.Close()
+		return err
+	}
+	return w.Close()
 }
 
 // openSegment reads a segment from the KV store and returns an opened reader.
@@ -416,16 +413,8 @@ func (s *segmentDataStore) Delete(ctx context.Context, key DataKey) error {
 	}
 
 	// Write .zap — overwrites the original segment at this RV.
-	zapWriter, err := s.kv.Save(ctx, segmentsSection, segmentKVKey(key))
-	if err != nil {
+	if err := s.writeKV(ctx, segmentsSection, segmentKVKey(key), seg.Data); err != nil {
 		return fmt.Errorf("failed to save tombstone segment: %w", err)
-	}
-	if _, err := zapWriter.Write(seg.Data); err != nil {
-		_ = zapWriter.Close()
-		return fmt.Errorf("failed to write tombstone segment data: %w", err)
-	}
-	if err := zapWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close tombstone segment writer: %w", err)
 	}
 
 	return nil
@@ -1012,7 +1001,6 @@ func (s *segmentDataStore) GetGroupResources(ctx context.Context) ([]GroupResour
 		// Parse {group}/{resource}/{rv}
 		parts := strings.SplitN(foundKey, "/", 3)
 		if len(parts) < 3 {
-			// Skip malformed keys.
 			startKey = foundKey + "\x00"
 			continue
 		}
