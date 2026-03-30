@@ -67,7 +67,6 @@ func TestSegmentDataStoreStorageBackend(t *testing.T) {
 }
 
 func TestIntegrationBenchmarkSegmentDataStoreStorageBackend(t *testing.T) {
-	t.Skip("segment datastore methods not yet implemented")
 	testutil.SkipIntegrationTestInShortMode(t)
 
 	opts := DefaultBenchmarkOptions(t)

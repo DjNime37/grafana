@@ -195,6 +195,7 @@ func runStorageBackendBenchmark(t *testing.T, backend resource.StorageBackend, o
 
 	rvs := make([]int64, opts.NumResources)
 
+	t.Logf("CREATE phase: %d resources, %d workers...", opts.NumResources, opts.Concurrency)
 	createResult := performOperation(func(ctx context.Context, jobID int, namespace, group, resource, name string) error {
 		var err error
 		rvs[jobID], err = WriteEvent(ctx, backend, name, resourcepb.WatchEvent_ADDED,
@@ -205,7 +206,9 @@ func runStorageBackendBenchmark(t *testing.T, backend resource.StorageBackend, o
 
 		return err
 	})
+	t.Logf("CREATE done: %v (%.1f req/s, p50=%v, p99=%v)", createResult.TotalDuration, createResult.Throughput, createResult.P50Latency, createResult.P99Latency)
 
+	t.Logf("UPDATE phase: %d resources, %d workers...", opts.NumResources, opts.Concurrency)
 	updateResult := performOperation(func(ctx context.Context, jobID int, namespace, group, resource, name string) error {
 		var err error
 		rvs[jobID], err = WriteEvent(ctx, backend, name, resourcepb.WatchEvent_MODIFIED,
@@ -216,7 +219,9 @@ func runStorageBackendBenchmark(t *testing.T, backend resource.StorageBackend, o
 
 		return err
 	})
+	t.Logf("UPDATE done: %v (%.1f req/s, p50=%v, p99=%v)", updateResult.TotalDuration, updateResult.Throughput, updateResult.P50Latency, updateResult.P99Latency)
 
+	t.Logf("DELETE phase: %d resources, %d workers...", opts.NumResources, opts.Concurrency)
 	deleteResult := performOperation(func(ctx context.Context, jobID int, namespace, group, resource, name string) error {
 		_, err := WriteEvent(ctx, backend, name, resourcepb.WatchEvent_DELETED,
 			WithNamespaceAndRV(namespace, rvs[jobID]),
@@ -226,6 +231,7 @@ func runStorageBackendBenchmark(t *testing.T, backend resource.StorageBackend, o
 
 		return err
 	})
+	t.Logf("DELETE done: %v (%.1f req/s, p50=%v, p99=%v)", deleteResult.TotalDuration, deleteResult.Throughput, deleteResult.P50Latency, deleteResult.P99Latency)
 
 	return &BenchmarkResults{
 		CreateResults: createResult,
@@ -277,6 +283,7 @@ func runListBenchmark(t *testing.T, backend resource.StorageBackend, opts *Bench
 		opts.NumResources, opts.NumHistoryVersions+1, time.Since(seedStart))
 
 	// --- Measure phase (concurrent List calls) ---
+	t.Logf("LIST phase: %d iterations, %d workers...", opts.NumListIterations, opts.Concurrency)
 	listReq := &resourcepb.ListRequest{
 		Options: &resourcepb.ListOptions{
 			Key: &resourcepb.ResourceKey{
@@ -337,8 +344,12 @@ func runListBenchmark(t *testing.T, backend resource.StorageBackend, opts *Bench
 
 // RunStorageBackendBenchmark runs a benchmark test for a storage backend implementation
 func RunStorageBackendBenchmark(t *testing.T, backend resource.StorageBackend, opts *BenchmarkOptions) {
+	t.Logf("Benchmark Configuration: %s", opts)
+
 	// Initialize the backend
+	initStart := time.Now()
 	require.NoError(t, initializeBackend(t.Context(), backend, opts))
+	t.Logf("INIT done: %v", time.Since(initStart))
 
 	results := runStorageBackendBenchmark(t, backend, opts)
 
