@@ -48,11 +48,13 @@ describe('TeamDeleteModal', () => {
     expect(await screen.findByRole('button', { name: 'Delete' })).toBeDisabled();
   });
 
-  it('calls onConfirm when clicking the `Delete` button', async () => {
+  it('calls onConfirm and then onDismiss when clicking the `Delete` button', async () => {
+    mockOnConfirm.mockResolvedValue(undefined);
     const { user } = render(<TeamDeleteModal {...defaultProps} />);
 
     await user.click(await screen.findByRole('button', { name: 'Delete' }));
     expect(mockOnConfirm).toHaveBeenCalled();
+    expect(mockOnDismiss).toHaveBeenCalled();
   });
 
   it('calls onDismiss when clicking the `Cancel` button', async () => {

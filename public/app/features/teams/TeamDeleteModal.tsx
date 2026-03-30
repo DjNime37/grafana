@@ -10,6 +10,11 @@ export interface Props {
 }
 
 export const TeamDeleteModal = ({ isOpen, onConfirm, onDismiss, teamName, ownedFolder }: Props) => {
+  const handleConfirm = async () => {
+    await onConfirm();
+    onDismiss();
+  };
+
   return (
     <ConfirmModal
       isOpen={isOpen}
@@ -43,7 +48,7 @@ export const TeamDeleteModal = ({ isOpen, onConfirm, onDismiss, teamName, ownedF
         </>
       }
       onDismiss={onDismiss}
-      onConfirm={onConfirm}
+      onConfirm={handleConfirm}
       confirmText={t('teams.team-list.columns.delete-modal.confirm-button', 'Delete')}
       disabled={ownedFolder}
     />
