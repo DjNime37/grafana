@@ -1,6 +1,7 @@
 import { HttpResponse, http } from 'msw';
 import { SetupServer } from 'msw/node';
 
+import { AlertRule } from '@grafana/api-clients/rtkq/rules.alerting/v0alpha1';
 import { setBackendSrv } from '@grafana/runtime';
 import server, { setupMockServer } from '@grafana/test-utils/server';
 import allHandlers from 'app/features/alerting/unified/mocks/server/all-handlers';
@@ -10,6 +11,7 @@ import {
 } from 'app/features/alerting/unified/mocks/server/entities/alertmanagers';
 import { resetRoutingTreeMap } from 'app/features/alerting/unified/mocks/server/entities/k8s/routingtrees';
 import { resetHistorianState } from 'app/features/alerting/unified/mocks/server/handlers/historian';
+import { RULES_API_SERVER_BASE_URL } from 'app/features/alerting/unified/mocks/server/handlers/k8s/alertrules.k8s';
 import { resetUserStorage } from 'app/features/alerting/unified/mocks/server/handlers/userStorage';
 import { DashboardDTO } from 'app/types/dashboard';
 import { FolderDTO } from 'app/types/folders';
@@ -191,6 +193,13 @@ export function mockAlertRuleApi(server: SetupServer) {
     },
     getAlertRuleVersionHistory: (uid: string, response: RulerGrafanaRuleDTO[]) => {
       server.use(http.get(`/api/ruler/grafana/api/v1/rule/${uid}/versions`, () => HttpResponse.json(response)));
+    },
+    getAlertRuleK8s: (uid: string, response: AlertRule) => {
+      server.use(
+        http.get(`${RULES_API_SERVER_BASE_URL}/namespaces/:namespace/alertrules/${uid}`, () =>
+          HttpResponse.json(response)
+        )
+      );
     },
   };
 }

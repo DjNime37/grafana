@@ -2,6 +2,8 @@ import { skipToken } from '@reduxjs/toolkit/query';
 import { useEffect, useMemo } from 'react';
 import { useAsync } from 'react-use';
 
+import { generatedAPI } from '@grafana/api-clients/rtkq/rules.alerting/v0alpha1';
+import { config } from '@grafana/runtime';
 import { isGrafanaRulesSource } from 'app/features/alerting/unified/utils/datasource';
 import {
   CombinedRule,
@@ -16,6 +18,7 @@ import { alertRuleApi } from '../api/alertRuleApi';
 import { featureDiscoveryApi } from '../api/featureDiscoveryApi';
 import { getDataSourceByName } from '../utils/datasource';
 import { groupIdentifier } from '../utils/groupIdentifier';
+import { K8sRuleLabels } from '../utils/k8s/constants';
 import * as ruleId from '../utils/rule-id';
 import { isCloudRuleIdentifier, isGrafanaRuleIdentifier, isPrometheusRuleIdentifier } from '../utils/rules';
 
@@ -187,18 +190,21 @@ export interface RuleLocation {
 }
 
 export function useRuleLocation(ruleIdentifier: RuleIdentifier): RequestState<RuleLocation> {
-  const validIdentifier = (() => {
-    if (isGrafanaRuleIdentifier(ruleIdentifier) && ruleIdentifier.uid !== '') {
-      return { uid: ruleIdentifier.uid };
-    }
-    return skipToken;
-  })();
+  const useK8sApi = config.featureToggles.kubernetesAlertingRules;
 
-  const { isLoading, currentData, error, isUninitialized } = alertRuleApi.endpoints.getAlertRule.useQuery(
-    validIdentifier,
-    {
-      refetchOnMountOrArgChange: true,
-    }
+  const grafanaRuleUid =
+    isGrafanaRuleIdentifier(ruleIdentifier) && ruleIdentifier.uid !== '' ? ruleIdentifier.uid : undefined;
+
+  // k8s API path — used when the kubernetesAlertingRules feature toggle is enabled
+  const k8sQuery = generatedAPI.useGetAlertRuleQuery(
+    useK8sApi && grafanaRuleUid ? { name: grafanaRuleUid } : skipToken,
+    { refetchOnMountOrArgChange: true }
+  );
+
+  // Ruler API path — used as fallback when the feature toggle is disabled
+  const rulerQuery = alertRuleApi.endpoints.getAlertRule.useQuery(
+    !useK8sApi && grafanaRuleUid ? { uid: grafanaRuleUid } : skipToken,
+    { refetchOnMountOrArgChange: true }
   );
 
   return useMemo(() => {
@@ -220,28 +226,56 @@ export function useRuleLocation(ruleIdentifier: RuleIdentifier): RequestState<Ru
     }
 
     if (isGrafanaRuleIdentifier(ruleIdentifier)) {
-      if (isLoading || isUninitialized) {
-        return { loading: true };
-      }
-
-      if (error) {
-        return { loading: false, error };
-      }
-      if (currentData) {
-        return {
-          result: {
-            datasource: ruleIdentifier.ruleSourceName,
-            namespace: currentData.grafana_alert.namespace_uid,
-            group: currentData.grafana_alert.rule_group,
-            ruleName: currentData.grafana_alert.title,
-            groupIdentifier: {
-              namespace: { uid: currentData.grafana_alert.namespace_uid },
-              groupName: currentData.grafana_alert.rule_group,
-              groupOrigin: 'grafana',
-            },
-          } satisfies RuleLocation,
-          loading: false,
-        };
+      if (useK8sApi) {
+        const { isLoading, isUninitialized, error, currentData } = k8sQuery;
+        if (isLoading || isUninitialized) {
+          return { loading: true };
+        }
+        if (error) {
+          return { loading: false, error };
+        }
+        if (currentData) {
+          const folderUid = currentData.metadata.labels?.[K8sRuleLabels.FolderUID] ?? '';
+          const ruleGroup = currentData.metadata.labels?.[K8sRuleLabels.RuleGroup] ?? '';
+          return {
+            result: {
+              datasource: ruleIdentifier.ruleSourceName,
+              namespace: folderUid,
+              group: ruleGroup,
+              ruleName: currentData.spec.title,
+              groupIdentifier: {
+                namespace: { uid: folderUid },
+                groupName: ruleGroup,
+                groupOrigin: 'grafana',
+              },
+            } satisfies RuleLocation,
+            loading: false,
+          };
+        }
+      } else {
+        const { isLoading, isUninitialized, error, currentData } = rulerQuery;
+        if (isLoading || isUninitialized) {
+          return { loading: true };
+        }
+        if (error) {
+          return { loading: false, error };
+        }
+        if (currentData) {
+          return {
+            result: {
+              datasource: ruleIdentifier.ruleSourceName,
+              namespace: currentData.grafana_alert.namespace_uid,
+              group: currentData.grafana_alert.rule_group,
+              ruleName: currentData.grafana_alert.title,
+              groupIdentifier: {
+                namespace: { uid: currentData.grafana_alert.namespace_uid },
+                groupName: currentData.grafana_alert.rule_group,
+                groupOrigin: 'grafana',
+              },
+            } satisfies RuleLocation,
+            loading: false,
+          };
+        }
       }
 
       // In theory, this should never happen
@@ -255,7 +289,7 @@ export function useRuleLocation(ruleIdentifier: RuleIdentifier): RequestState<Ru
       loading: false,
       error: new Error('Unsupported rule identifier'),
     };
-  }, [ruleIdentifier, isLoading, isUninitialized, error, currentData]);
+  }, [ruleIdentifier, useK8sApi, k8sQuery, rulerQuery]);
 }
 
 function getRulesSourceFromIdentifier(ruleIdentifier: RuleIdentifier): RulesSource | undefined {
