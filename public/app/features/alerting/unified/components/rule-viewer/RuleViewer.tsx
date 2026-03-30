@@ -38,6 +38,7 @@ import { useRuleViewExtensionsNav } from '../../enterprise-components/rule-view-
 import { shouldUseAlertingListViewV2, shouldUsePrometheusRulesPrimary } from '../../featureToggles';
 import { isError, useAsync } from '../../hooks/useAsync';
 import { useRuleLocation } from '../../hooks/useCombinedRule';
+import { useHasInhibitedInstances } from '../../hooks/useHasInhibitedInstances';
 import { useHasRulerV2 } from '../../hooks/useHasRuler';
 import { useRuleGroupConsistencyCheck } from '../../hooks/usePrometheusConsistencyCheck';
 import { useReturnTo } from '../../hooks/useReturnTo';
@@ -112,6 +113,12 @@ const RuleViewer = () => {
   const isProvisioned = rulerRuleType.grafana.rule(rulerRule) && Boolean(rulerRule.grafana_alert.provenance);
   const isPaused = rulerRuleType.grafana.rule(rulerRule) && isPausedRule(rulerRule);
 
+  // Only check for inhibited instances on Grafana-managed alerting rules
+  const grafanaAlertingRuleUid = rulerRuleType.grafana.alertingRule(rulerRule)
+    ? rulerRule.grafana_alert.uid
+    : undefined;
+  const { hasInhibitedInstances } = useHasInhibitedInstances(grafanaAlertingRuleUid);
+
   const showError = hasError && !isPaused;
   const ruleOrigin = rulerRule ? getRulePluginOrigin(rulerRule) : getRulePluginOrigin(promRule);
 
@@ -127,6 +134,7 @@ const RuleViewer = () => {
           name={title}
           paused={isPaused}
           state={prometheusRuleType.alertingRule(promRule) ? promRule.state : undefined}
+          isInhibited={hasInhibitedInstances}
           health={promRule?.health}
           ruleType={promRule?.type}
           ruleOrigin={ruleOrigin}
@@ -307,19 +315,32 @@ interface TitleProps {
   paused?: boolean;
   // recording rules don't have a state
   state?: PromAlertingRuleState;
+  isInhibited?: boolean;
   health?: RuleHealth;
   ruleType?: PromRuleType;
   ruleOrigin?: RulePluginOrigin;
   returnToHref?: string;
 }
 
-export const Title = ({ name, paused = false, state, health, ruleType, ruleOrigin, returnToHref = '' }: TitleProps) => {
+export const Title = ({
+  name,
+  paused = false,
+  state,
+  isInhibited = false,
+  health,
+  ruleType,
+  ruleOrigin,
+  returnToHref = '',
+}: TitleProps) => {
   const isRecordingRule = ruleType === PromRuleType.Recording;
 
   const { returnTo } = useReturnTo(returnToHref);
 
   const textHealth = normalizeHealth(health);
   const textState = normalizeState(state);
+  // inhibited overrides firing — showing both would be redundant since a rule
+  // can only have inhibited instances if they are firing
+  const displayState = isInhibited ? 'inhibited' : textState;
 
   return (
     <Stack direction="row" gap={1} minWidth={0} alignItems="center">
@@ -336,7 +357,9 @@ export const Title = ({ name, paused = false, state, health, ruleType, ruleOrigi
         {name}
       </Text>
       {/* recording rules won't have a state */}
-      {state && <StateText type="alerting" state={textState} health={textHealth} isPaused={paused} />}
+      {(state || isInhibited) && (
+        <StateText type="alerting" state={displayState} health={textHealth} isPaused={paused} />
+      )}
       {isRecordingRule && <StateText type="recording" health={textHealth} isPaused={paused} />}
     </Stack>
   );
