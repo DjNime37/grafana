@@ -34,6 +34,7 @@ import { t } from '@grafana/i18n';
 import { type FieldConfig } from '@grafana/schema';
 import { RadioButtonGroup, TimeZonePicker, Switch } from '@grafana/ui';
 import { FieldNamePicker } from '@grafana/ui/internal';
+import { onAddThreshold } from 'app/features/dimensions/editors/ThresholdsEditor/ThresholdsEditor';
 import { ThresholdsValueEditor } from 'app/features/dimensions/editors/ThresholdsEditor/thresholds';
 import { ValueMappingsEditor } from 'app/features/dimensions/editors/ValueMappingsEditor/ValueMappingsEditor';
 
@@ -451,6 +452,7 @@ export const getAllStandardFieldConfigs = () => {
     shouldApply: () => true,
     category: [t('options-ui.registry.standard-field-configs.category-thresholds', 'Thresholds')],
     getItemsCount: (value) => (value ? value.steps.length : 0),
+    onAdd: onAddThreshold,
   };
 
   const filterable: FieldConfigPropertyItem<FieldConfig, boolean | undefined, {}> = {

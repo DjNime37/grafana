@@ -25,6 +25,11 @@ export interface OptionsEditorItem<TOptions, TSettings, TEditorProps, TValue>
    * @param value
    */
   getItemsCount?: (value?: TValue) => number;
+
+  /**
+   * For list options, handles adding new values
+   */
+  onAdd?: (value: TValue) => TValue;
 }
 
 /**

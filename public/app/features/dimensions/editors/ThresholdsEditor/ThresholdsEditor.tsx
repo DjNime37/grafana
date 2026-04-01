@@ -24,6 +24,7 @@ export const ThresholdsEditor = memo(function ThresholdsEditor({ thresholds, onC
     steps[0].value = -Infinity;
     return steps;
   });
+
   const latestThresholdInputRef = useRef<HTMLInputElement>(null);
   const isMounted = useRef(false);
   const userAddedThreshold = useRef(false);
@@ -58,32 +59,32 @@ export const ThresholdsEditor = memo(function ThresholdsEditor({ thresholds, onC
     onChange(thresholdsWithoutKey(thresholds, newSteps));
   }
 
-  function onAddThreshold() {
-    let nextValue = 0;
+  // function onAddThreshold() {
+  //   let nextValue = 0;
 
-    if (steps.length > 1) {
-      nextValue = steps[steps.length - 1].value + 10;
-    }
+  //   if (steps.length > 1) {
+  //     nextValue = steps[steps.length - 1].value + 10;
+  //   }
 
-    let color = colors.filter((c) => !steps.some((t) => t.color === c))[1];
-    if (!color) {
-      // Default color when all colors are used
-      color = '#CCCCCC';
-    }
+  //   let color = colors.filter((c) => !steps.some((t) => t.color === c))[1];
+  //   if (!color) {
+  //     // Default color when all colors are used
+  //     color = '#CCCCCC';
+  //   }
 
-    const add = {
-      value: nextValue,
-      color: color,
-      key: counter++,
-    };
+  //   const add = {
+  //     value: nextValue,
+  //     color: color,
+  //     key: counter++,
+  //   };
 
-    const newThresholds = [...steps, add];
-    sortThresholds(newThresholds);
+  //   const newThresholds = [...steps, add];
+  //   sortThresholds(newThresholds);
 
-    userAddedThreshold.current = true;
-    setSteps(newThresholds);
-    fireOnChange(newThresholds);
-  }
+  //   userAddedThreshold.current = true;
+  //   setSteps(newThresholds);
+  //   fireOnChange(newThresholds);
+  // }
 
   function onRemoveThreshold(threshold: ThresholdWithKey) {
     if (!steps.length) {
@@ -231,9 +232,6 @@ export const ThresholdsEditor = memo(function ThresholdsEditor({ thresholds, onC
 
   return (
     <div className={styles.wrapper}>
-      <Button size="sm" icon="plus" onClick={onAddThreshold} variant="secondary" className={styles.addButton} fullWidth>
-        <Trans i18nKey="dimensions.thresholds-editor.add-threshold">Add threshold</Trans>
-      </Button>
       <div className={styles.thresholds}>
         {steps
           .slice(0)
@@ -291,6 +289,32 @@ export function thresholdsWithoutKey(thresholds: ThresholdsConfig, steps: Thresh
       return rest; // everything except key
     }),
   };
+}
+
+export function onAddThreshold(current: ThresholdsConfig): ThresholdsConfig {
+  let nextValue = 0;
+  const steps = current.steps ?? [];
+
+  if (steps.length > 1) {
+    nextValue = steps[steps.length - 1].value + 10;
+  }
+
+  let color = colors.filter((c) => !steps.some((t) => t.color === c))[1];
+  if (!color) {
+    // Default color when all colors are used
+    color = '#CCCCCC';
+  }
+
+  const add = {
+    value: nextValue,
+    color: color,
+    key: counter++,
+  };
+
+  const newThresholds = [...steps, add];
+  sortThresholds(newThresholds);
+
+  return { ...current, steps: newThresholds };
 }
 
 const getStyles = (theme: GrafanaTheme2) => {

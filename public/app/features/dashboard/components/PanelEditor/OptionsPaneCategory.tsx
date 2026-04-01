@@ -26,6 +26,7 @@ export interface OptionsPaneCategoryProps {
    * When set will disable category and show tooltip with disabledText on hover
    */
   disabledText?: string | React.ReactElement;
+  onAdd?: () => void;
 }
 
 const CATEGORY_PARAM_NAME = 'showCategory' as const;
@@ -41,6 +42,7 @@ export const OptionsPaneCategory = React.memo(
     className,
     itemsCount,
     isNested = false,
+    onAdd,
     sandboxId,
     disabledText,
   }: OptionsPaneCategoryProps) => {
@@ -139,6 +141,20 @@ export const OptionsPaneCategory = React.memo(
           <h6 id={`button-${id}`} className={cx(styles.title, isExpanded && styles.titleExpanded)}>
             {renderTitle(isExpanded)}
           </h6>
+          {onAdd && (
+            <Button
+              size="sm"
+              icon="plus"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isExpanded) {
+                  setIsExpanded(true);
+                }
+                onAdd();
+              }}
+              aria-label={t('dashboard.options-pane-category.aria-label-add', 'Add {{title}}', { title })}
+            />
+          )}
           <Button
             aria-label={
               isExpanded

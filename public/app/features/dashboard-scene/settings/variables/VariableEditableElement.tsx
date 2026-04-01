@@ -12,7 +12,7 @@ import {
   SceneVariableSet,
   useSceneObjectState,
 } from '@grafana/scenes';
-import { Input, TextArea, Button, Field, Box, Stack, Alert } from '@grafana/ui';
+import { Input, TextArea, Button, Field, Box, Stack, Alert, Select } from '@grafana/ui';
 import { OptionsPaneCategoryDescriptor } from 'app/features/dashboard/components/PanelEditor/OptionsPaneCategoryDescriptor';
 import { OptionsPaneItemDescriptor } from 'app/features/dashboard/components/PanelEditor/OptionsPaneItemDescriptor';
 
@@ -80,6 +80,13 @@ function useEditPaneOptions(this: VariableEditableElement, isNewElement: boolean
           id: variableDisplayId,
           skipField: true,
           render: () => <VariableDisplayInput variable={variable} />,
+        })
+      )
+      .addItem(
+        new OptionsPaneItemDescriptor({
+          title: 'Type',
+          id: 'type',
+          render: () => <Select value="Query" options={[{ label: 'Query', value: 'query' }]} onChange={() => {}} />,
         })
       );
   }, [variableOptionsCategoryId, variableNameId, labelId, descriptionId, variableDisplayId, variable, isNewElement]);

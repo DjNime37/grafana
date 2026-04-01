@@ -34,6 +34,7 @@ export interface StandardEditorsRegistryItem<TValue = any, TSettings = any> exte
   editor: ComponentType<StandardEditorProps<TValue, TSettings>>;
   settings?: TSettings;
 }
+
 export const standardFieldConfigEditorRegistry = new FieldConfigOptionsRegistry();
 
 export const standardEditorsRegistry = new Registry<StandardEditorsRegistryItem>();

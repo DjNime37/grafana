@@ -277,6 +277,20 @@ export function getVisualizationOptions2(props: OptionPaneRenderProps2): Options
       category.props.itemsCount = fieldOption.getItemsCount(value);
     }
 
+    if (fieldOption.onAdd) {
+      category.props.onAdd = () => {
+        panel.onFieldConfigChange(
+          updateDefaultFieldConfigValue(
+            currentFieldConfig,
+            fieldOption.path,
+            fieldOption.onAdd!(value),
+            fieldOption.isCustom
+          ),
+          true
+        );
+      };
+    }
+
     const htmlId = `${plugin.meta.id}-${fieldOption.path}`;
     category.addItem(
       new OptionsPaneItemDescriptor({
