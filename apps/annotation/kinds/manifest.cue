@@ -34,6 +34,23 @@ v0alpha1: {
 					}
 				}
 			}
+			"/graphite": {
+				"POST": {
+					name: "createGraphite"
+					request: {
+						body: {
+							what: string
+							data: string
+							when: number
+							tags: _
+						}
+					}
+					response: {
+						message: string
+						id:      string
+					}
+				}
+			}
 		}
 	}
 	codegen: {

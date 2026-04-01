@@ -98,14 +98,18 @@ func NewAppInstaller(
 	// Create the search handler
 	searchHandler := newSearchHandler(store, accessClient)
 
+	// Create the graphite handler
+	graphiteHandler := newGraphiteHandler(store)
+
 	provider := simple.NewAppProvider(apis.LocalManifest(), nil, annotationapp.New)
 
 	appConfig := app.Config{
 		KubeConfig:   restclient.Config{},
 		ManifestData: *apis.LocalManifest().ManifestData,
 		SpecificConfig: &annotationapp.AnnotationConfig{
-			TagHandler:    tagHandler,
-			SearchHandler: searchHandler,
+			TagHandler:      tagHandler,
+			SearchHandler:   searchHandler,
+			GraphiteHandler: graphiteHandler,
 		},
 	}
 	i, err := appsdkapiserver.NewDefaultAppInstaller(provider, appConfig, apis.NewGoTypeAssociator())
