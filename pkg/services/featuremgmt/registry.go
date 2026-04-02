@@ -603,7 +603,7 @@ var (
 		{
 			Name:         "annotationsClustering",
 			Description:  "Enables annotation clustering and switches to refactored annotation code",
-			Stage:        FeatureStageExperimental,
+			Stage:        FeatureStagePublicPreview,
 			FrontendOnly: true,
 			Owner:        grafanaDatavizSquad,
 			Expression:   "false",
@@ -627,10 +627,10 @@ var (
 		{
 			Name:         "dashboardDefaultLayoutSelector",
 			Description:  "Enables default layout selector in dashboard settings",
-			Stage:        FeatureStageExperimental,
+			Stage:        FeatureStageGeneralAvailability,
 			FrontendOnly: true,
 			Owner:        grafanaDashboardsSquad,
-			Expression:   "false",
+			Expression:   "true",
 		},
 		{
 			Name:         "dashboardAssistantPopover",
@@ -1082,10 +1082,10 @@ var (
 		{
 			Name:         "alertingListViewV2",
 			Description:  "Enables the new alert list view design",
-			Stage:        FeatureStagePrivatePreview,
+			Stage:        FeatureStageGeneralAvailability,
 			Owner:        grafanaAlertingSquad,
 			FrontendOnly: true,
-			Expression:   "false",
+			Expression:   "true",
 		},
 		{
 			Name:         "alertingAlertListPanelEnhancements",
@@ -1103,22 +1103,7 @@ var (
 			FrontendOnly: false,
 			Expression:   "true",
 		},
-		{
-			Name:         "alertingSavedSearches",
-			Description:  "Enables saved searches for alert rules list",
-			Stage:        FeatureStageExperimental,
-			Owner:        grafanaAlertingSquad,
-			FrontendOnly: true,
-			Expression:   "false",
-		},
-		{
-			Name:         "alertingTriageSavedSearches",
-			Description:  "Enables saved searches for the Alert Activity page",
-			Stage:        FeatureStageExperimental,
-			Owner:        grafanaAlertingSquad,
-			FrontendOnly: true,
-			Expression:   "false",
-		},
+
 		{
 			Name:         "alertingDisableSendAlertsExternal",
 			Description:  "Disables the ability to send alerts to an external Alertmanager datasource.",
@@ -1223,14 +1208,7 @@ var (
 			Owner:       grafanaPartnerPluginsSquad,
 			Expression:  "true", // Enabled by default for now
 		},
-		{
-			Name:         "alertingFilterV2",
-			Description:  "Enable the new alerting search experience",
-			Stage:        FeatureStageExperimental,
-			Owner:        grafanaAlertingSquad,
-			HideFromDocs: true,
-			Expression:   "false",
-		},
+
 		{
 			Name:            "dataplaneAggregator",
 			Description:     "Enable grafana dataplane aggregator",
@@ -1805,9 +1783,9 @@ var (
 			Name:         "alertingListViewV2PreviewToggle",
 			Description:  "Enables the alerting list view v2 preview toggle",
 			FrontendOnly: true,
-			Stage:        FeatureStagePrivatePreview,
+			Stage:        FeatureStagePublicPreview,
 			Owner:        grafanaAlertingSquad,
-			Expression:   "false",
+			Expression:   "true",
 		},
 		{
 			Name:        "alertRuleUseFiredAtForStartsAt",
@@ -2808,6 +2786,22 @@ var (
 			Owner:        grafanaDatavizSquad,
 			Expression:   "false",
 			HideFromDocs: true,
+		},
+		{
+			Name:         "enableDatasourceMetaApiPluginLoading",
+			Description:  "Enables loading datasource plugins from the MetaAPI instead of bootData settings",
+			Stage:        FeatureStageExperimental,
+			Owner:        grafanaFrontendPlatformSquad,
+			FrontendOnly: true,
+			Expression:   "false",
+		},
+		{
+			Name:         "enableColorblindSafePanelOptions",
+			Description:  "Enables new colorblind safe palette and line fill patterns for panels",
+			Stage:        FeatureStageExperimental,
+			Owner:        grafanaDatavizSquad,
+			FrontendOnly: true,
+			Expression:   "false",
 		},
 	}
 )
