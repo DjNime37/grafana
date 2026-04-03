@@ -924,13 +924,17 @@
     {
       "metadata": {
         "name": "analyticsFramework",
-        "resourceVersion": "1772205128141",
-        "creationTimestamp": "2026-02-27T15:12:08Z"
+        "resourceVersion": "1775232578758",
+        "creationTimestamp": "2026-02-27T15:12:08Z",
+        "annotations": {
+          "grafana.app/updatedTimestamp": "2026-04-03 16:09:38.758008 +0000 UTC"
+        }
       },
       "spec": {
         "description": "Enables new analytics framework",
         "stage": "experimental",
         "codeowner": "@grafana/grafana-frontend-platform",
+        "frontend": true,
         "hideFromDocs": true,
         "expression": "false"
       }
@@ -2564,13 +2568,17 @@
     {
       "metadata": {
         "name": "inlineLogDetailsNoScrolls",
-        "resourceVersion": "1772636622548",
-        "creationTimestamp": "2026-03-04T15:03:42Z"
+        "resourceVersion": "1775232578758",
+        "creationTimestamp": "2026-03-04T15:03:42Z",
+        "annotations": {
+          "grafana.app/updatedTimestamp": "2026-04-03 16:09:38.758008 +0000 UTC"
+        }
       },
       "spec": {
         "description": "Enables an inline version of Log Details that creates no new scrolls",
         "stage": "experimental",
         "codeowner": "@grafana/observability-logs",
+        "frontend": true,
         "expression": "false"
       }
     },
@@ -4249,16 +4257,17 @@
     {
       "metadata": {
         "name": "provisioningFolderMetadata",
-        "resourceVersion": "1771843876800",
+        "resourceVersion": "1775232578758",
         "creationTimestamp": "2026-02-23T10:49:14Z",
         "annotations": {
-          "grafana.app/updatedTimestamp": "2026-02-23 10:51:16.80095 +0000 UTC"
+          "grafana.app/updatedTimestamp": "2026-04-03 16:09:38.758008 +0000 UTC"
         }
       },
       "spec": {
         "description": "Allow setting folder metadata for provisioned folders",
         "stage": "experimental",
         "codeowner": "@grafana/grafana-app-platform-squad",
+        "frontend": true,
         "requiresRestart": true,
         "expression": "false"
       }

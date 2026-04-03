@@ -91,10 +91,6 @@ const (
 	// Enables Git Sync and as-code provisioning for Grafana resources
 	FlagProvisioning = "provisioning"
 
-	// FlagProvisioningFolderMetadata
-	// Allow setting folder metadata for provisioned folders
-	FlagProvisioningFolderMetadata = "provisioningFolderMetadata"
-
 	// FlagProvisioningExport
 	// Enable export functionality for provisioned resources
 	FlagProvisioningExport = "provisioningExport"
@@ -886,17 +882,9 @@ const (
 	// Handle datasource health requests to the legacy API routes by querying the new datasource api group endpoints behind the scenes.
 	FlagDatasourcesApiServerEnableHealthEndpoint = "datasourcesApiServerEnableHealthEndpoint"
 
-	// FlagAnalyticsFramework
-	// Enables new analytics framework
-	FlagAnalyticsFramework = "analyticsFramework"
-
 	// FlagAdvisorDatasourceIntegration
 	// Enables the advisor report integration with datasource pages
 	FlagAdvisorDatasourceIntegration = "advisorDatasourceIntegration"
-
-	// FlagInlineLogDetailsNoScrolls
-	// Enables an inline version of Log Details that creates no new scrolls
-	FlagInlineLogDetailsNoScrolls = "inlineLogDetailsNoScrolls"
 
 	// FlagColorblindThemes
 	// Enables the new colorblind-friendly themes
