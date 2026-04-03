@@ -1649,7 +1649,7 @@ export interface FeatureToggles {
   * Whether to use the new SharedPreferences functional component
   * @default false
   */
-  functionalSharedPreferences?: boolean;
+  ['grafana.newPreferencesPage']?: boolean;
   /**
   * Enables managed plugins v2 (expanded rollout, community plugin coverage)
   * @default false
