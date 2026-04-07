@@ -3,7 +3,7 @@ module github.com/grafana/grafana/apps/dashvalidator
 go 1.25.8
 
 require (
-	github.com/grafana/authlib/types v0.0.0-20260316143530-e1d123886039
+	github.com/grafana/authlib/types v0.0.0-20260407141039-e337d5a0c7df
 	github.com/grafana/grafana v6.1.6+incompatible
 	github.com/grafana/grafana-app-sdk v0.52.1
 	github.com/grafana/grafana-app-sdk/logging v0.51.4
@@ -129,7 +129,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/google/wire v0.7.0 // indirect
 	github.com/grafana/alerting v0.0.0-20260330164719-5946ccd00861 // indirect
-	github.com/grafana/authlib v0.0.0-20260316143530-e1d123886039 // indirect
+	github.com/grafana/authlib v0.0.0-20260407141039-e337d5a0c7df // indirect
 	github.com/grafana/dataplane/sdata v0.0.9 // indirect
 	github.com/grafana/dskit v0.0.0-20260108123158-1a1acfb6ef2e // indirect
 	github.com/grafana/grafana-aws-sdk v1.4.3 // indirect

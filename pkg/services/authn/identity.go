@@ -347,3 +347,10 @@ func (i *Identity) ExternalUserInfo() login.ExternalUserInfo {
 		IsDisabled:     i.IsDisabled,
 	}
 }
+
+func (i *Identity) GetInnermostServiceIdentity() string {
+	if i.AccessTokenClaims != nil {
+		return i.AccessTokenClaims.Rest.ServiceIdentity
+	}
+	return ""
+}

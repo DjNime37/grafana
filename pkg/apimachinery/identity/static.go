@@ -242,3 +242,10 @@ func (u *StaticRequester) GetAccessToken() string {
 func (u *StaticRequester) GetIDToken() string {
 	return u.IDToken
 }
+
+func (u *StaticRequester) GetInnermostServiceIdentity() string {
+	if u.AccessTokenClaims != nil {
+		return u.AccessTokenClaims.Rest.ServiceIdentity
+	}
+	return ""
+}

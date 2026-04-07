@@ -333,3 +333,7 @@ func (u *SignedInUser) GetIDToken() string {
 func (u *SignedInUser) GetAccessToken() string {
 	return u.AccessToken
 }
+
+func (u *SignedInUser) GetInnermostServiceIdentity() string {
+	return ""
+}
