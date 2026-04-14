@@ -961,4 +961,8 @@ const (
 	// FlagAlertingRulesAPIV2
 	// Enables the new Rules API v2 UI with evaluation chains and groupless rule creation
 	FlagAlertingRulesAPIV2 = "alerting.rulesAPIV2"
+
+	// FlagAlertingSyncExternalAlertmanager
+	// Automatically syncs external Alertmanager datasource configuration as ExtraConfiguration in Grafana
+	FlagAlertingSyncExternalAlertmanager = "alerting.syncExternalAlertmanager"
 )
