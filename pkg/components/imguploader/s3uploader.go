@@ -4,19 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/client"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
-	"github.com/aws/aws-sdk-go/aws/credentials/endpointcreds"
-	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
-	"github.com/aws/aws-sdk-go/aws/defaults"
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/aws/aws-sdk-go/service/sts"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/grafana/grafana/pkg/infra/log"
 	"github.com/grafana/grafana/pkg/util"
 )
@@ -26,14 +20,14 @@ type S3Uploader struct {
 	region          string
 	bucket          string
 	path            string
-	acl             string
+	acl             types.ObjectCannedACL
 	secretKey       string
 	accessKey       string
 	pathStyleAccess bool
 	log             log.Logger
 }
 
-func NewS3Uploader(endpoint, region, bucket, path, acl, accessKey, secretKey string, pathStyleAccess bool) *S3Uploader {
+func NewS3Uploader(endpoint, region, bucket, path string, acl types.ObjectCannedACL, accessKey, secretKey string, pathStyleAccess bool) *S3Uploader {
 	return &S3Uploader{
 		endpoint:        endpoint,
 		region:          region,
@@ -48,26 +42,26 @@ func NewS3Uploader(endpoint, region, bucket, path, acl, accessKey, secretKey str
 }
 
 func (u *S3Uploader) Upload(ctx context.Context, imageDiskPath string) (string, error) {
-	sess, err := session.NewSession()
+	configOpts := []func(*config.LoadOptions) error{
+		config.WithRegion(u.region),
+	}
+	if u.accessKey != "" && u.secretKey != "" {
+		configOpts = append(configOpts,
+			config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(u.accessKey, u.secretKey, "")),
+		)
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, configOpts...)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("loading AWS config: %w", err)
 	}
-	creds := credentials.NewChainCredentials(
-		[]credentials.Provider{
-			&credentials.StaticProvider{Value: credentials.Value{
-				AccessKeyID:     u.accessKey,
-				SecretAccessKey: u.secretKey,
-			}},
-			&credentials.EnvProvider{},
-			webIdentityProvider(sess),
-			remoteCredProvider(sess),
-		})
-	cfg := &aws.Config{
-		Region:           aws.String(u.region),
-		Endpoint:         aws.String(u.endpoint),
-		S3ForcePathStyle: aws.Bool(u.pathStyleAccess),
-		Credentials:      creds,
-	}
+
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if u.endpoint != "" {
+			o.BaseEndpoint = aws.String(u.endpoint)
+		}
+		o.UsePathStyle = u.pathStyleAccess
+	})
 
 	rand, err := util.GetRandomString(20)
 	if err != nil {
@@ -89,56 +83,15 @@ func (u *S3Uploader) Upload(ctx context.Context, imageDiskPath string) (string, 
 		}
 	}()
 
-	sess, err = session.NewSession(cfg)
-	if err != nil {
-		return "", err
-	}
-
-	uploader := s3manager.NewUploader(sess)
-	result, err := uploader.UploadWithContext(ctx, &s3manager.UploadInput{
+	result, err := manager.NewUploader(client).Upload(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(u.bucket),
 		Key:         aws.String(key),
-		ACL:         aws.String(u.acl),
+		ACL:         u.acl,
 		Body:        file,
 		ContentType: aws.String("image/png"),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("uploading to S3: %w", err)
 	}
 	return result.Location, nil
-}
-
-func webIdentityProvider(sess client.ConfigProvider) credentials.Provider {
-	svc := sts.New(sess)
-
-	roleARN := os.Getenv("AWS_ROLE_ARN")
-	tokenFilepath := os.Getenv("AWS_WEB_IDENTITY_TOKEN_FILE")
-	roleSessionName := os.Getenv("AWS_ROLE_SESSION_NAME")
-
-	// nolint:staticcheck
-	return stscreds.NewWebIdentityRoleProvider(svc, roleARN, roleSessionName, tokenFilepath)
-}
-
-func remoteCredProvider(sess *session.Session) credentials.Provider {
-	ecsCredURI := os.Getenv("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
-
-	if len(ecsCredURI) > 0 {
-		return ecsCredProvider(sess, ecsCredURI)
-	}
-	return ec2RoleProvider(sess)
-}
-
-func ecsCredProvider(sess *session.Session, uri string) credentials.Provider {
-	const host = `169.254.170.2`
-
-	d := defaults.Get()
-	return endpointcreds.NewProviderClient(
-		*d.Config,
-		d.Handlers,
-		fmt.Sprintf("http://%s%s", host, uri),
-		func(p *endpointcreds.Provider) { p.ExpiryWindow = 5 * time.Minute })
-}
-
-func ec2RoleProvider(sess client.ConfigProvider) credentials.Provider {
-	return &ec2rolecreds.EC2RoleProvider{Client: ec2metadata.New(sess), ExpiryWindow: 5 * time.Minute}
 }

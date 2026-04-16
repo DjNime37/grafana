@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"k8s.io/utils/ptr"
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
@@ -125,7 +125,7 @@ func TestAPIQueryPublicDashboard(t *testing.T) {
 						Name: "anyDataFrame",
 						Fields: []*data.Field{
 							data.NewField("anyGroupName", nil, []*string{
-								aws.String("group_a"), aws.String("group_b"), aws.String("group_c"),
+								ptr.To("group_a"), ptr.To("group_b"), ptr.To("group_c"),
 							}),
 						},
 					},
