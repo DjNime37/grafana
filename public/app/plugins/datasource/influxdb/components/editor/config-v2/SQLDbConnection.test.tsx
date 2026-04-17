@@ -2,20 +2,19 @@ import '@testing-library/jest-dom';
 
 import { act, render, screen, fireEvent } from '@testing-library/react';
 
-import { InfluxFluxDBConnection } from './InfluxFluxDBConnection';
+import { SQLDbConnection } from './SQLDbConnection';
 import { createMockValidation, createTestProps } from './helpers';
 
-describe('InfluxFluxDBConnection', () => {
+describe('SQLDbConnection', () => {
   const onOptionsChangeMock = jest.fn();
 
   const defaultProps = createTestProps({
     options: {
       jsonData: {
-        organization: 'MyOrg',
-        defaultBucket: 'MyBucket',
+        dbName: 'testdb',
       },
       secureJsonData: {
-        token: 'my-token',
+        token: 'abc123',
       },
       secureJsonFields: {
         token: true,
@@ -26,28 +25,22 @@ describe('InfluxFluxDBConnection', () => {
     },
   });
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('renders organization, bucket and token inputs', () => {
-    render(<InfluxFluxDBConnection {...defaultProps} />);
-    expect(screen.getByLabelText(/Organization/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/Default Bucket/i)).toBeInTheDocument();
+  it('renders database and token fields', () => {
+    render(<SQLDbConnection {...defaultProps} />);
+    expect(screen.getByLabelText(/Database/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Token/i)).toBeInTheDocument();
   });
 
-  it('calls onOptionsChange on input change', () => {
-    render(<InfluxFluxDBConnection {...defaultProps} />);
-    const orgInput = screen.getByLabelText(/Organization/i);
-    fireEvent.change(orgInput, { target: { value: 'NewOrg' } });
+  it('calls onOptionsChange on dbName change', () => {
+    render(<SQLDbConnection {...defaultProps} />);
+    fireEvent.change(screen.getByLabelText(/Database/i), { target: { value: 'newdb' } });
     expect(onOptionsChangeMock).toHaveBeenCalled();
   });
 
   describe('validation', () => {
     const emptyProps = createTestProps({
       options: {
-        jsonData: { organization: '', defaultBucket: '' },
+        jsonData: { dbName: '' },
         secureJsonData: { token: '' },
         secureJsonFields: { token: false },
       },
@@ -56,27 +49,25 @@ describe('InfluxFluxDBConnection', () => {
 
     it('shows inline errors for all required fields when validator is called with empty values', async () => {
       const validation = createMockValidation();
-      render(<InfluxFluxDBConnection {...emptyProps} validation={validation} />);
+      render(<SQLDbConnection {...emptyProps} validation={validation} />);
 
       await act(async () => {
         validation.runValidator();
       });
 
-      expect(screen.getByText('Organization is required')).toBeInTheDocument();
-      expect(screen.getByText('Default bucket is required')).toBeInTheDocument();
+      expect(screen.getByText('Database is required')).toBeInTheDocument();
       expect(screen.getByText('Token is required')).toBeInTheDocument();
     });
 
     it('shows no errors when all fields are filled', async () => {
       const validation = createMockValidation();
-      render(<InfluxFluxDBConnection {...defaultProps} validation={validation} />);
+      render(<SQLDbConnection {...defaultProps} validation={validation} />);
 
       await act(async () => {
         validation.runValidator();
       });
 
-      expect(screen.queryByText('Organization is required')).not.toBeInTheDocument();
-      expect(screen.queryByText('Default bucket is required')).not.toBeInTheDocument();
+      expect(screen.queryByText('Database is required')).not.toBeInTheDocument();
       expect(screen.queryByText('Token is required')).not.toBeInTheDocument();
     });
   });

@@ -2,10 +2,10 @@ import '@testing-library/jest-dom';
 
 import { act, render, screen, fireEvent } from '@testing-library/react';
 
-import { InfluxInfluxQLDBConnection } from './InfluxInfluxQLDBConnection';
+import { InfluxQLDbConnection } from './InfluxQLDbConnection';
 import { createMockValidation, createTestProps } from './helpers';
 
-describe('InfluxInfluxQLDBConnection', () => {
+describe('InfluxQLDbConnection', () => {
   const onOptionsChangeMock = jest.fn();
 
   const defaultProps = createTestProps({
@@ -27,7 +27,7 @@ describe('InfluxInfluxQLDBConnection', () => {
   });
 
   it('renders dbName, user and password fields', () => {
-    render(<InfluxInfluxQLDBConnection {...defaultProps} />);
+    render(<InfluxQLDbConnection {...defaultProps} />);
 
     expect(screen.getByLabelText(/^Database\b/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/^User\b/i)).toBeInTheDocument();
@@ -35,7 +35,7 @@ describe('InfluxInfluxQLDBConnection', () => {
   });
 
   it('calls onOptionsChange on input changes', () => {
-    render(<InfluxInfluxQLDBConnection {...defaultProps} />);
+    render(<InfluxQLDbConnection {...defaultProps} />);
 
     fireEvent.change(screen.getByLabelText(/User/i), { target: { value: 'newuser' } });
 
@@ -55,7 +55,7 @@ describe('InfluxInfluxQLDBConnection', () => {
 
     it('shows inline errors for all required fields when validator is called with empty values', async () => {
       const validation = createMockValidation();
-      render(<InfluxInfluxQLDBConnection {...emptyProps} validation={validation} />);
+      render(<InfluxQLDbConnection {...emptyProps} validation={validation} />);
 
       await act(async () => {
         validation.runValidator();
@@ -68,7 +68,7 @@ describe('InfluxInfluxQLDBConnection', () => {
 
     it('shows no errors when all fields are filled', async () => {
       const validation = createMockValidation();
-      render(<InfluxInfluxQLDBConnection {...defaultProps} validation={validation} />);
+      render(<InfluxQLDbConnection {...defaultProps} validation={validation} />);
 
       await act(async () => {
         validation.runValidator();

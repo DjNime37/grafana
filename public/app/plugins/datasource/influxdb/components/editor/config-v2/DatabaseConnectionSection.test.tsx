@@ -11,16 +11,16 @@ jest.mock('./AdvancedDBConnectionSettings', () => ({
   AdvancedDbConnectionSettings: () => <div data-testid="advanced-db-settings" />,
 }));
 
-jest.mock('./InfluxFluxDBConnection', () => ({
-  InfluxFluxDBConnection: () => <div data-testid="flux-connection" />,
+jest.mock('./FluxDbConnection', () => ({
+  FluxDbConnection: () => <div data-testid="flux-connection" />,
 }));
 
-jest.mock('./InfluxSQLDBConnection', () => ({
-  InfluxSQLDBConnection: () => <div data-testid="sql-connection" />,
+jest.mock('./SQLDbConnection', () => ({
+  SQLDbConnection: () => <div data-testid="sql-connection" />,
 }));
 
-jest.mock('./InfluxInfluxQLDBConnection', () => ({
-  InfluxInfluxQLDBConnection: () => <div data-testid="influxql-connection" />,
+jest.mock('./InfluxQLDbConnection', () => ({
+  InfluxQLDbConnection: () => <div data-testid="influxql-connection" />,
 }));
 
 describe('DatabaseConnectionSection', () => {

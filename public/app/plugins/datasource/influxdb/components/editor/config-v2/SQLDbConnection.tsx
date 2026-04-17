@@ -8,18 +8,14 @@ import {
 import { Input, SecretInput, Field, Space, Box } from '@grafana/ui';
 
 import {
-  trackInfluxDBConfigV2FluxDBDetailsDefaultBucketInputField,
-  trackInfluxDBConfigV2FluxDBDetailsOrgInputField,
-  trackInfluxDBConfigV2FluxDBDetailsTokenInputField,
+  trackInfluxDBConfigV2SQLDBDetailsDatabaseInputField,
+  trackInfluxDBConfigV2SQLDBDetailsTokenInputField,
 } from './tracking';
 import { type Props } from './types';
 
-export const InfluxFluxDBConnection = (props: Props) => {
-  const {
-    options: { jsonData, secureJsonData, secureJsonFields },
-    validation,
-  } = props;
-
+export const SQLDbConnection = (props: Props) => {
+  const { options, validation } = props;
+  const { secureJsonData, secureJsonFields } = options;
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const tokenConfigured = Boolean(secureJsonFields?.token);
   const tokenEntered = Boolean(secureJsonData?.token);
@@ -45,21 +41,13 @@ export const InfluxFluxDBConnection = (props: Props) => {
     if (!validation) {
       return;
     }
-    if (jsonData.organization) {
+    if (options.jsonData.dbName) {
       setFieldErrors((prev) => {
         const next = { ...prev };
-        delete next.organization;
+        delete next.dbName;
         return next;
       });
-      validation.clearError('organization');
-    }
-    if (jsonData.defaultBucket) {
-      setFieldErrors((prev) => {
-        const next = { ...prev };
-        delete next.defaultBucket;
-        return next;
-      });
-      validation.clearError('defaultBucket');
+      validation.clearError('dbName');
     }
     if (tokenConfigured || tokenEntered) {
       setFieldErrors((prev) => {
@@ -71,67 +59,36 @@ export const InfluxFluxDBConnection = (props: Props) => {
     }
     return validation.registerValidation(() => {
       const errors: Record<string, string> = {};
-      if (!jsonData.organization) {
-        errors.organization = 'Organization is required';
-      }
-      if (!jsonData.defaultBucket) {
-        errors.defaultBucket = 'Default bucket is required';
+      if (!options.jsonData.dbName) {
+        errors.dbName = 'Database is required';
       }
       if (!tokenConfigured && !tokenEntered) {
         errors.token = 'Token is required';
       }
       setFieldErrors(errors);
       Object.entries(errors).forEach(([field, msg]) => validation.setError(field, msg));
-      if (!errors.organization) {
-        validation.clearError('organization');
-      }
-      if (!errors.defaultBucket) {
-        validation.clearError('defaultBucket');
+      if (!errors.dbName) {
+        validation.clearError('dbName');
       }
       if (!errors.token) {
         validation.clearError('token');
       }
       return Object.keys(errors).length === 0;
     });
-  }, [jsonData.organization, jsonData.defaultBucket, tokenConfigured, tokenEntered, validation]);
+  }, [options.jsonData.dbName, tokenConfigured, tokenEntered, validation]);
 
   return (
     <Box width="50%">
-      <Field
-        label="Organization"
-        required
-        noMargin
-        invalid={!!fieldErrors.organization}
-        error={fieldErrors.organization}
-      >
+      <Field label="Database" required noMargin invalid={!!fieldErrors.dbName} error={fieldErrors.dbName}>
         <Input
-          id="organization"
-          placeholder="myorg"
+          id="database"
+          placeholder="mydb"
+          value={options.jsonData.dbName}
+          onChange={onUpdateDatasourceJsonDataOption(props, 'dbName')}
           onBlur={(e) => {
-            trackInfluxDBConfigV2FluxDBDetailsOrgInputField();
-            validateField('organization', !!e.target.value, 'Organization is required');
+            trackInfluxDBConfigV2SQLDBDetailsDatabaseInputField();
+            validateField('dbName', !!e.target.value, 'Database is required');
           }}
-          onChange={onUpdateDatasourceJsonDataOption(props, 'organization')}
-          value={jsonData.organization || ''}
-        />
-      </Field>
-      <Space v={2} />
-      <Field
-        label="Default bucket"
-        required
-        noMargin
-        invalid={!!fieldErrors.defaultBucket}
-        error={fieldErrors.defaultBucket}
-      >
-        <Input
-          id="default-bucket"
-          onBlur={(e) => {
-            trackInfluxDBConfigV2FluxDBDetailsDefaultBucketInputField();
-            validateField('defaultBucket', !!e.target.value, 'Default bucket is required');
-          }}
-          onChange={onUpdateDatasourceJsonDataOption(props, 'defaultBucket')}
-          placeholder="mybucket"
-          value={jsonData.defaultBucket || ''}
         />
       </Field>
       <Space v={2} />
@@ -140,7 +97,7 @@ export const InfluxFluxDBConnection = (props: Props) => {
           id="token"
           isConfigured={tokenConfigured}
           onBlur={(e) => {
-            trackInfluxDBConfigV2FluxDBDetailsTokenInputField();
+            trackInfluxDBConfigV2SQLDBDetailsTokenInputField();
             validateField('token', tokenConfigured || !!e.target.value, 'Token is required');
           }}
           onChange={onUpdateDatasourceSecureJsonDataOption(props, 'token')}
