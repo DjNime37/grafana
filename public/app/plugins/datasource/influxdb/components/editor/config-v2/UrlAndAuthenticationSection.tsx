@@ -43,6 +43,23 @@ export const UrlAndAuthenticationSection = (props: Props) => {
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const validateField = (field: string, hasValue: boolean, errorMsg: string) => {
+    if (!validation) {
+      return;
+    }
+    if (!hasValue) {
+      setFieldErrors((prev) => ({ ...prev, [field]: errorMsg }));
+      validation.setError(field, errorMsg);
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+      validation.clearError(field);
+    }
+  };
+
   useEffect(() => {
     if (!validation) {
       return;
@@ -244,6 +261,7 @@ export const UrlAndAuthenticationSection = (props: Props) => {
               onBlur={(e) => {
                 detectProductFromUrl(e);
                 trackInfluxDBConfigV2URLInputField();
+                validateField('url', !!e.target.value, 'URL is required');
               }}
             />
           </Field>

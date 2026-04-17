@@ -21,6 +21,23 @@ export const InfluxInfluxQLDBConnection = (props: Props) => {
   const passwordConfigured = Boolean(options.secureJsonFields?.password);
   const passwordEntered = Boolean(options.secureJsonData?.password);
 
+  const validateField = (field: string, hasValue: boolean, errorMsg: string) => {
+    if (!validation) {
+      return;
+    }
+    if (!hasValue) {
+      setFieldErrors((prev) => ({ ...prev, [field]: errorMsg }));
+      validation.setError(field, errorMsg);
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+      validation.clearError(field);
+    }
+  };
+
   useEffect(() => {
     if (!validation) {
       return;
@@ -83,7 +100,10 @@ export const InfluxInfluxQLDBConnection = (props: Props) => {
           placeholder="mydb"
           value={options.jsonData.dbName}
           onChange={onUpdateDatasourceJsonDataOption(props, 'dbName')}
-          onBlur={trackInfluxDBConfigV2InfluxQLDBDetailsDatabaseInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2InfluxQLDBDetailsDatabaseInputField();
+            validateField('dbName', !!e.target.value, 'Database is required');
+          }}
         />
       </Field>
       <Space v={2} />
@@ -93,7 +113,10 @@ export const InfluxInfluxQLDBConnection = (props: Props) => {
           placeholder="myuser"
           value={options.user || ''}
           onChange={onUpdateDatasourceOption(props, 'user')}
-          onBlur={trackInfluxDBConfigV2InfluxQLDBDetailsUserInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2InfluxQLDBDetailsUserInputField();
+            validateField('user', !!e.target.value, 'User is required');
+          }}
         />
       </Field>
       <Space v={2} />
@@ -104,7 +127,10 @@ export const InfluxInfluxQLDBConnection = (props: Props) => {
           value={options.secureJsonData?.password || ''}
           onReset={() => updateDatasourcePluginResetOption(props, 'password')}
           onChange={onUpdateDatasourceSecureJsonDataOption(props, 'password')}
-          onBlur={trackInfluxDBConfigV2InfluxQLDBDetailsPasswordInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2InfluxQLDBDetailsPasswordInputField();
+            validateField('password', passwordConfigured || !!e.target.value, 'Password is required');
+          }}
         />
       </Field>
     </Box>

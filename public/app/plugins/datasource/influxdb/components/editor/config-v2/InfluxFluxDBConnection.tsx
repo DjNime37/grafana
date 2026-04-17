@@ -24,6 +24,23 @@ export const InfluxFluxDBConnection = (props: Props) => {
   const tokenConfigured = Boolean(secureJsonFields?.token);
   const tokenEntered = Boolean(secureJsonData?.token);
 
+  const validateField = (field: string, hasValue: boolean, errorMsg: string) => {
+    if (!validation) {
+      return;
+    }
+    if (!hasValue) {
+      setFieldErrors((prev) => ({ ...prev, [field]: errorMsg }));
+      validation.setError(field, errorMsg);
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+      validation.clearError(field);
+    }
+  };
+
   useEffect(() => {
     if (!validation) {
       return;
@@ -90,7 +107,10 @@ export const InfluxFluxDBConnection = (props: Props) => {
         <Input
           id="organization"
           placeholder="myorg"
-          onBlur={trackInfluxDBConfigV2FluxDBDetailsOrgInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2FluxDBDetailsOrgInputField();
+            validateField('organization', !!e.target.value, 'Organization is required');
+          }}
           onChange={onUpdateDatasourceJsonDataOption(props, 'organization')}
           value={jsonData.organization || ''}
         />
@@ -105,7 +125,10 @@ export const InfluxFluxDBConnection = (props: Props) => {
       >
         <Input
           id="default-bucket"
-          onBlur={trackInfluxDBConfigV2FluxDBDetailsDefaultBucketInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2FluxDBDetailsDefaultBucketInputField();
+            validateField('defaultBucket', !!e.target.value, 'Default bucket is required');
+          }}
           onChange={onUpdateDatasourceJsonDataOption(props, 'defaultBucket')}
           placeholder="mybucket"
           value={jsonData.defaultBucket || ''}
@@ -116,7 +139,10 @@ export const InfluxFluxDBConnection = (props: Props) => {
         <SecretInput
           id="token"
           isConfigured={tokenConfigured}
-          onBlur={trackInfluxDBConfigV2FluxDBDetailsTokenInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2FluxDBDetailsTokenInputField();
+            validateField('token', tokenConfigured || !!e.target.value, 'Token is required');
+          }}
           onChange={onUpdateDatasourceSecureJsonDataOption(props, 'token')}
           onReset={() => updateDatasourcePluginResetOption(props, 'token')}
           value={secureJsonData?.token || ''}

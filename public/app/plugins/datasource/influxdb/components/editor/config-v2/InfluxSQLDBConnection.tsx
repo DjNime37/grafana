@@ -20,6 +20,23 @@ export const InfluxSQLDBConnection = (props: Props) => {
   const tokenConfigured = Boolean(secureJsonFields?.token);
   const tokenEntered = Boolean(secureJsonData?.token);
 
+  const validateField = (field: string, hasValue: boolean, errorMsg: string) => {
+    if (!validation) {
+      return;
+    }
+    if (!hasValue) {
+      setFieldErrors((prev) => ({ ...prev, [field]: errorMsg }));
+      validation.setError(field, errorMsg);
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+      validation.clearError(field);
+    }
+  };
+
   useEffect(() => {
     if (!validation) {
       return;
@@ -68,7 +85,10 @@ export const InfluxSQLDBConnection = (props: Props) => {
           placeholder="mydb"
           value={options.jsonData.dbName}
           onChange={onUpdateDatasourceJsonDataOption(props, 'dbName')}
-          onBlur={trackInfluxDBConfigV2SQLDBDetailsDatabaseInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2SQLDBDetailsDatabaseInputField();
+            validateField('dbName', !!e.target.value, 'Database is required');
+          }}
         />
       </Field>
       <Space v={2} />
@@ -76,7 +96,10 @@ export const InfluxSQLDBConnection = (props: Props) => {
         <SecretInput
           id="token"
           isConfigured={tokenConfigured}
-          onBlur={trackInfluxDBConfigV2SQLDBDetailsTokenInputField}
+          onBlur={(e) => {
+            trackInfluxDBConfigV2SQLDBDetailsTokenInputField();
+            validateField('token', tokenConfigured || !!e.target.value, 'Token is required');
+          }}
           onChange={onUpdateDatasourceSecureJsonDataOption(props, 'token')}
           onReset={() => updateDatasourcePluginResetOption(props, 'token')}
           value={secureJsonData?.token || ''}
