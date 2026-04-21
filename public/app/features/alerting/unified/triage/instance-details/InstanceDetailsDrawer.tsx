@@ -10,7 +10,6 @@ import { TimeRangePicker, useTimeRange } from '@grafana/scenes-react';
 import {
   Alert,
   Box,
-  Button,
   Drawer,
   Icon,
   LoadingBar,
@@ -38,6 +37,12 @@ import { groups, rulesNav } from '../../utils/navigation';
 import { ContactPointDrawer } from './ContactPointDrawer';
 import { DrawerTimeRangeInfoBanner } from './DrawerTimeRangeInfoBanner';
 import { EditContactPointDrawer } from './EditContactPointDrawer';
+import {
+  DrawerBackButton,
+  InstanceDrilldownDrawer,
+  StackedDrilldownDrawerPair,
+  StackedInstanceDrawers,
+} from './InstanceDetailsDrawerShell';
 import { InstanceDetailsDrawerTitle } from './InstanceDetailsDrawerTitle';
 import { InstanceSilenceForm } from './InstanceSilenceForm';
 import { InstanceStateInfoBanner } from './InstanceStateInfoBanner';
@@ -50,17 +55,6 @@ import { formatTimelineDate, noop } from './timelineUtils';
 
 const { useGetAlertRuleQuery } = alertRuleApi;
 const { useGetRuleHistoryQuery } = stateHistoryApi;
-
-function DrawerBackButton({ onClick }: { onClick: () => void }) {
-  const backLabel = t('alerting.triage.instance-details-drawer.back', 'Back');
-  return (
-    <Stack direction="row" alignItems="center">
-      <Button variant="secondary" size="sm" fill="text" icon="arrow-left" onClick={onClick} aria-label={backLabel}>
-        {backLabel}
-      </Button>
-    </Stack>
-  );
-}
 
 interface InstanceDetailsDrawerProps {
   ruleUID: string;
@@ -316,33 +310,19 @@ export function InstanceDetailsDrawer({ ruleUID, instanceLabels, commonLabels, o
 
   if (activeView.type === 'silence' || isClosingSilenceDrawer) {
     return (
-      <>
-        <Drawer
-          title={<InstanceDetailsDrawerTitle {...sharedTitleProps} rule={rule.grafana_alert} />}
-          onClose={handleDrawerClose}
-          size="md"
-        >
-          {getInstanceDetailsBody()}
-        </Drawer>
-        <Drawer
-          title={
-            <InstanceDetailsDrawerTitle
-              {...sharedTitleProps}
-              rule={rule.grafana_alert}
-              titleText={t('alerting.triage.instance-details-drawer.silence-title-with-name', 'Silence {{name}}', {
-                name: rule.grafana_alert.title,
-              })}
-              hideActions
-              showAlertState={false}
-              titleSection={<DrawerBackButton onClick={handleBack} />}
-            />
-          }
-          onClose={handleDrawerClose}
-          size="md"
-        >
+      <StackedInstanceDrawers
+        sharedTitleProps={sharedTitleProps}
+        rule={rule.grafana_alert}
+        onClose={handleDrawerClose}
+        onBack={handleBack}
+        drilldownTitleText={t('alerting.triage.instance-details-drawer.silence-title-with-name', 'Silence {{name}}', {
+          name: rule.grafana_alert.title,
+        })}
+        mainChildren={getInstanceDetailsBody()}
+        drilldownChildren={
           <InstanceSilenceForm ruleUid={ruleUID} instanceLabels={instanceLabels} onClose={animateCloseSilenceDrawer} />
-        </Drawer>
-      </>
+        }
+      />
     );
   }
 
@@ -354,70 +334,43 @@ export function InstanceDetailsDrawer({ ruleUID, instanceLabels, commonLabels, o
         : (activeView.displayTitle ?? activeView.receiverResourceName);
 
     return (
-      <>
-        <Drawer
-          title={
-            <InstanceDetailsDrawerTitle
-              {...sharedTitleProps}
-              rule={rule.grafana_alert}
-              titleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
-                name: receiverNameForList,
-              })}
-              hideActions
-              showAlertState={false}
-              titleSection={<DrawerBackButton onClick={handleBack} />}
-            />
-          }
-          onClose={handleDrawerClose}
-          size="md"
-        >
+      <StackedDrilldownDrawerPair
+        sharedTitleProps={sharedTitleProps}
+        rule={rule.grafana_alert}
+        onClose={handleDrawerClose}
+        onBack={handleBack}
+        rearTitleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
+          name: receiverNameForList,
+        })}
+        frontTitleText={t('alerting.triage.instance-details-drawer.edit-contact-point-title', 'Edit {{name}}', {
+          name: activeView.displayTitle ?? activeView.receiverResourceName,
+        })}
+        rearChildren={
           <ContactPointDrawer receiverName={receiverNameForList} onEditContactPoint={handleOpenEditContactPoint} />
-        </Drawer>
-        <Drawer
-          title={
-            <InstanceDetailsDrawerTitle
-              {...sharedTitleProps}
-              rule={rule.grafana_alert}
-              titleText={t('alerting.triage.instance-details-drawer.edit-contact-point-title', 'Edit {{name}}', {
-                name: activeView.displayTitle ?? activeView.receiverResourceName,
-              })}
-              hideActions
-              showAlertState={false}
-              titleSection={<DrawerBackButton onClick={handleBack} />}
-            />
-          }
-          onClose={handleDrawerClose}
-          size="md"
-        >
+        }
+        frontChildren={
           <EditContactPointDrawer contactPointName={activeView.receiverResourceName} onSaveSuccess={popTopView} />
-        </Drawer>
-      </>
+        }
+      />
     );
   }
 
   if (activeView.type === 'contact-point-list') {
     return (
-      <Drawer
-        title={
-          <InstanceDetailsDrawerTitle
-            {...sharedTitleProps}
-            rule={rule.grafana_alert}
-            titleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
-              name: activeView.receiverName,
-            })}
-            hideActions
-            showAlertState={false}
-            titleSection={<DrawerBackButton onClick={handleBack} />}
-          />
-        }
+      <InstanceDrilldownDrawer
+        sharedTitleProps={sharedTitleProps}
+        rule={rule.grafana_alert}
+        titleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
+          name: activeView.receiverName,
+        })}
         onClose={handleDrawerClose}
-        size="md"
+        onBack={handleBack}
       >
         <ContactPointDrawer
           receiverName={activeView.receiverName}
           onEditContactPoint={canViewContactPoints ? handleOpenEditContactPoint : undefined}
         />
-      </Drawer>
+      </InstanceDrilldownDrawer>
     );
   }
 
