@@ -29,6 +29,7 @@ import { EventState } from '../../components/rules/central-state-history/EventLi
 import { type LogRecord, historyDataFrameToLogRecords } from '../../components/rules/state-history/common';
 import { useCanViewContactPoints } from '../../hooks/useAbilities';
 import { isAlertQueryOfAlertData } from '../../rule-editor/formProcessing';
+import { AlertmanagerProvider } from '../../state/AlertmanagerContext';
 import { GRAFANA_RULES_SOURCE_NAME } from '../../utils/datasource';
 import { labelsToMatchersParam } from '../../utils/matchers';
 import { stringifyErrorLike } from '../../utils/misc';
@@ -269,6 +270,14 @@ export function InstanceDetailsDrawer({ ruleUID, instanceLabels, commonLabels, o
             stateHistoryError={stateHistoryError}
             loadingBarRef={ref}
             onOpenContactPoint={canViewContactPoints ? handleOpenContactPoint : undefined}
+            contactPointPermissionText={
+              canViewContactPoints
+                ? undefined
+                : t(
+                    'alerting.instance-details.contact-point-no-permission-tooltip',
+                    'You do not have permission to open contact points from here.'
+                  )
+            }
           />
         ) : (
           <Box ref={ref}>
@@ -334,24 +343,26 @@ export function InstanceDetailsDrawer({ ruleUID, instanceLabels, commonLabels, o
         : (activeView.displayTitle ?? activeView.receiverResourceName);
 
     return (
-      <StackedDrilldownDrawerPair
-        sharedTitleProps={sharedTitleProps}
-        rule={rule.grafana_alert}
-        onClose={handleDrawerClose}
-        onBack={handleBack}
-        rearTitleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
-          name: receiverNameForList,
-        })}
-        frontTitleText={t('alerting.triage.instance-details-drawer.edit-contact-point-title', 'Edit {{name}}', {
-          name: activeView.displayTitle ?? activeView.receiverResourceName,
-        })}
-        rearChildren={
-          <ContactPointDrawer receiverName={receiverNameForList} onEditContactPoint={handleOpenEditContactPoint} />
-        }
-        frontChildren={
-          <EditContactPointDrawer contactPointName={activeView.receiverResourceName} onSaveSuccess={popTopView} />
-        }
-      />
+      <AlertmanagerProvider accessType="instance">
+        <StackedDrilldownDrawerPair
+          sharedTitleProps={sharedTitleProps}
+          rule={rule.grafana_alert}
+          onClose={handleDrawerClose}
+          onBack={handleBack}
+          rearTitleText={t('alerting.triage.instance-details-drawer.contact-point-title', 'Contact point: {{name}}', {
+            name: receiverNameForList,
+          })}
+          frontTitleText={t('alerting.triage.instance-details-drawer.edit-contact-point-title', 'Edit {{name}}', {
+            name: activeView.displayTitle ?? activeView.receiverResourceName,
+          })}
+          rearChildren={
+            <ContactPointDrawer listSearchQuery={receiverNameForList} onEditContactPoint={handleOpenEditContactPoint} />
+          }
+          frontChildren={
+            <EditContactPointDrawer contactPointName={activeView.receiverResourceName} onSaveSuccess={popTopView} />
+          }
+        />
+      </AlertmanagerProvider>
     );
   }
 
@@ -366,10 +377,12 @@ export function InstanceDetailsDrawer({ ruleUID, instanceLabels, commonLabels, o
         onClose={handleDrawerClose}
         onBack={handleBack}
       >
-        <ContactPointDrawer
-          receiverName={activeView.receiverName}
-          onEditContactPoint={canViewContactPoints ? handleOpenEditContactPoint : undefined}
-        />
+        <AlertmanagerProvider accessType="instance">
+          <ContactPointDrawer
+            listSearchQuery={activeView.receiverName}
+            onEditContactPoint={canViewContactPoints ? handleOpenEditContactPoint : undefined}
+          />
+        </AlertmanagerProvider>
       </InstanceDrilldownDrawer>
     );
   }
