@@ -1741,4 +1741,9 @@ export interface FeatureToggles {
   * @default false
   */
   clickHouseConfigValidation?: boolean;
+  /**
+  * Enables the new Rules API v2 UI with evaluation chains and groupless rule creation
+  * @default false
+  */
+  ['alerting.rulesAPIV2']?: boolean;
 }
