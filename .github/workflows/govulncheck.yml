@@ -1,0 +1,43 @@
+name: govulncheck
+
+on:
+  push:
+    paths:
+      - '**/*.go'
+      - .github/workflows/govulncheck.yml
+      - go.*
+    branches:
+      - main
+  pull_request:
+    paths:
+      - '**/*.go'
+      - .github/workflows/govulncheck.yml
+      - go.*
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-x64-xlarge-io
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          cache-build: 'false'
+      - name: Run govulncheck on all modules
+        run: |
+          set -euo pipefail
+          failed=0
+          for dir in $(go list -m -f '{{.Dir}}'); do
+            # Skip directories that have a .nolint file, such as the wire fork
+            [ -f "$dir/.nolint" ] && continue
+            echo "::group::govulncheck $dir"
+            (cd "$dir" && go run golang.org/x/vuln/cmd/govulncheck@latest ./...) || failed=1
+            echo "::endgroup::"
+          done
+          exit $failed
