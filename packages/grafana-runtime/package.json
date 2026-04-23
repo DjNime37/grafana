@@ -59,6 +59,7 @@
     "@grafana/schema": "13.1.0-pre",
     "@grafana/ui": "13.1.0-pre",
     "@openfeature/core": "^1.9.2",
+    "@openfeature/localstorage-provider": "^0.1.2",
     "@openfeature/ofrep-web-provider": "^0.3.6",
     "@openfeature/react-sdk": "^1.2.1",
     "@openfeature/web-sdk": "^1.7.3",

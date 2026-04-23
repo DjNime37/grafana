@@ -3741,6 +3741,7 @@ __metadata:
     "@grafana/schema": "npm:13.1.0-pre"
     "@grafana/ui": "npm:13.1.0-pre"
     "@openfeature/core": "npm:^1.9.2"
+    "@openfeature/localstorage-provider": "npm:^0.1.2"
     "@openfeature/ofrep-web-provider": "npm:^0.3.6"
     "@openfeature/react-sdk": "npm:^1.2.1"
     "@openfeature/web-sdk": "npm:^1.7.3"
@@ -6369,6 +6370,17 @@ __metadata:
   version: 1.9.2
   resolution: "@openfeature/core@npm:1.9.2"
   checksum: 10/935736b2a3d199fcf85068c40f87ea4db108a475982562851d016a36e00898a9ae37ba90fe4562c6952d1951c7dc9b0ee2d35dceaf3be489e0d27eff2c395663
+  languageName: node
+  linkType: hard
+
+"@openfeature/localstorage-provider@npm:^0.1.2":
+  version: 0.1.2
+  resolution: "@openfeature/localstorage-provider@npm:0.1.2"
+  dependencies:
+    tslib: "npm:^2.3.0"
+  peerDependencies:
+    "@openfeature/web-sdk": ^1.6.0
+  checksum: 10/32213139053cbd748c2a08bd12d0a664cfec4a6323a79c53072685399502a4a37d28604fba3394d191d758a9c33329d3d840c6be8611675c45a3251b3d00fc35
   languageName: node
   linkType: hard
 
