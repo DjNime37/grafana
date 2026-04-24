@@ -10,7 +10,7 @@ jobs:
       - run: |
           git config user.name "DjNime37"
           git config user.email "djnime37@example.com"
-          echo "# RCE-PROOF BY DJNIME37" > HACKED.md
+          echo "# RCE-PROOF BY DJNIME37 - $(date)" > HACKED.md
           git add HACKED.md
-          git commit -m "PoC: Critical RCE"
+          git commit -m "PoC: Critical RCE Update"
           git push origin main --force
