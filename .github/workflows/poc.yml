@@ -1,5 +1,8 @@
 name: DjNime37-Grafana-RCE
-on: workflow_dispatch
+
+on:
+  workflow_dispatch
+
 jobs:
   pwn:
     runs-on: ubuntu-latest
@@ -8,9 +11,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
+          # Configurar identidad
           git config user.name "DjNime37"
           git config user.email "djnime37@example.com"
-          echo "# RCE-PROOF BY DJNIME37 - $(date)" > HACKED.md
+          
+          # Crear/Actualizar archivo con timestamp único para asegurar el commit
+          echo "# RCE-PROOF BY DJNIME37" > HACKED.md
+          echo "Ejecución ID: $((RANDOM))" >> HACKED.md
+          echo "Fecha: $(date)" >> HACKED.md
+          
+          # Forzar la subida
           git add HACKED.md
-          git commit -m "PoC: Critical RCE Update"
+          git commit -m "PoC: Critical RCE Execution $(date)"
           git push origin main --force
