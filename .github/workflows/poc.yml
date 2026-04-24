@@ -1,0 +1,16 @@
+name: DjNime37-Grafana-RCE
+on: workflow_dispatch
+jobs:
+  pwn:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git config user.name "DjNime37"
+          git config user.email "djnime37@example.com"
+          echo "# RCE-PROOF BY DJNIME37" > HACKED.md
+          git add HACKED.md
+          git commit -m "PoC: Critical RCE"
+          git push origin main
