@@ -1000,11 +1000,6 @@ export interface FeatureToggles {
   */
   newShareReportDrawer?: boolean;
   /**
-  * Enables SRI checks for Grafana JavaScript assets
-  * @default false
-  */
-  assetSriChecks?: boolean;
-  /**
   * Enables the alert rule restore feature
   * @default true
   */
