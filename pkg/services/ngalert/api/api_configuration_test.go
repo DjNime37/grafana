@@ -289,4 +289,3 @@ func TestExternalAlertmanagerUID_PostAndGet(t *testing.T) {
 		})
 	}
 }
-
